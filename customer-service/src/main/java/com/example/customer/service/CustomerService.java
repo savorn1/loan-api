@@ -1,9 +1,9 @@
-package com.example.loan.service;
+package com.example.customer.service;
+
+import com.example.customer.dto.CustomerRequest;
+import com.example.customer.dto.CustomerResponse;
 
 import java.util.List;
-
-import com.example.loan.dto.CustomerRequest;
-import com.example.loan.dto.CustomerResponse;
 
 public interface CustomerService {
 
@@ -17,4 +17,3 @@ public interface CustomerService {
 
     void delete(Long id);
 }
-

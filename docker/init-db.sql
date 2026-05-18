@@ -1,0 +1,4 @@
+CREATE DATABASE auth_db;
+CREATE DATABASE customer_db;
+CREATE DATABASE loan_db;
+CREATE DATABASE payment_db;

@@ -1,31 +1,9 @@
 version: '3.9'
 
+# Uses your existing local PostgreSQL and Redis.
+# host.docker.internal resolves to your Mac's IP from inside any container.
+
 services:
-
-  # ── Infrastructure ──────────────────────────────────────────────────────────
-
-  postgres:
-    image: postgres:16-alpine
-    container_name: loan-postgres
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
-    networks:
-      - loan-net
-
-  redis:
-    image: redis:7-alpine
-    container_name: loan-redis
-    command: redis-server --requirepass 123456
-    ports:
-      - "6379:6379"
-    networks:
-      - loan-net
 
   # ── Service Registry ────────────────────────────────────────────────────────
 
@@ -39,10 +17,11 @@ services:
     networks:
       - loan-net
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8761/actuator/health"]
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8761/actuator/health || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 60s
 
   # ── API Gateway ─────────────────────────────────────────────────────────────
 
@@ -71,11 +50,11 @@ services:
     ports:
       - "8081:8081"
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/auth_db
-      SPRING_DATASOURCE_PASSWORD: postgres
+      SPRING_DATASOURCE_URL: jdbc:postgresql://host.docker.internal:5432/auth_db
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: 
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-server:8761/eureka/
     depends_on:
-      - postgres
       - discovery-server
     networks:
       - loan-net
@@ -88,14 +67,14 @@ services:
     ports:
       - "8082:8082"
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/customer_db
-      SPRING_DATASOURCE_PASSWORD: postgres
-      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATASOURCE_URL: jdbc:postgresql://host.docker.internal:5432/customer_db
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: 
+      SPRING_DATA_REDIS_HOST: host.docker.internal
+      SPRING_DATA_REDIS_PORT: 6379
       SPRING_DATA_REDIS_PASSWORD: 123456
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-server:8761/eureka/
     depends_on:
-      - postgres
-      - redis
       - discovery-server
     networks:
       - loan-net
@@ -108,11 +87,11 @@ services:
     ports:
       - "8083:8083"
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/loan_db
-      SPRING_DATASOURCE_PASSWORD: postgres
+      SPRING_DATASOURCE_URL: jdbc:postgresql://host.docker.internal:5432/loan_db
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD:
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-server:8761/eureka/
     depends_on:
-      - postgres
       - discovery-server
       - customer-service
     networks:
@@ -126,11 +105,11 @@ services:
     ports:
       - "8084:8084"
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/payment_db
-      SPRING_DATASOURCE_PASSWORD: postgres
+      SPRING_DATASOURCE_URL: jdbc:postgresql://host.docker.internal:5432/payment_db
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: 
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-server:8761/eureka/
     depends_on:
-      - postgres
       - discovery-server
       - loan-service
     networks:
@@ -139,6 +118,3 @@ services:
 networks:
   loan-net:
     driver: bridge
-
-volumes:
-  postgres_data:

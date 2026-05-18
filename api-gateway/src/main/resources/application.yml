@@ -11,6 +11,7 @@ spring:
           enabled: true
           lower-case-service-id: true
       routes:
+        # ── Business routes ────────────────────────────────────────────────────
         - id: auth-service
           uri: lb://auth-service
           predicates:
@@ -31,6 +32,35 @@ spring:
           predicates:
             - Path=/api/payments/**
 
+        # ── OpenAPI docs routes (for gateway Swagger aggregation) ──────────────
+        - id: auth-service-docs
+          uri: lb://auth-service
+          predicates:
+            - Path=/v3/api-docs/auth-service
+          filters:
+            - RewritePath=/v3/api-docs/auth-service, /v3/api-docs
+
+        - id: customer-service-docs
+          uri: lb://customer-service
+          predicates:
+            - Path=/v3/api-docs/customer-service
+          filters:
+            - RewritePath=/v3/api-docs/customer-service, /v3/api-docs
+
+        - id: loan-service-docs
+          uri: lb://loan-service
+          predicates:
+            - Path=/v3/api-docs/loan-service
+          filters:
+            - RewritePath=/v3/api-docs/loan-service, /v3/api-docs
+
+        - id: payment-service-docs
+          uri: lb://payment-service
+          predicates:
+            - Path=/v3/api-docs/payment-service
+          filters:
+            - RewritePath=/v3/api-docs/payment-service, /v3/api-docs
+
 eureka:
   client:
     service-url:
@@ -41,6 +71,22 @@ eureka:
 # Shared JWT secret — must match the value in auth-service
 jwt:
   secret: 5JzoMqNmIFBDIk6nEqB6tCrLn2FGH4KkPcVpTZFm3UsXgYwRdUaE8lVjQ9sHbON0
+
+# Aggregated Swagger UI — one page that shows all services
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    config-url: /v3/api-docs/swagger-config
+    disable-swagger-default-url: true
+    urls:
+      - name: auth-service
+        url: /v3/api-docs/auth-service
+      - name: customer-service
+        url: /v3/api-docs/customer-service
+      - name: loan-service
+        url: /v3/api-docs/loan-service
+      - name: payment-service
+        url: /v3/api-docs/payment-service
 
 management:
   endpoints:

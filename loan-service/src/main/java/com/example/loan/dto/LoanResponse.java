@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Data
@@ -22,6 +23,10 @@ public class LoanResponse {
     private LocalDateTime approvedAt;
     private LocalDateTime rejectedAt;
     private LocalDateTime disbursedAt;
+    private LocalDateTime closedAt;
+    private LocalDate maturityDate;
+    private BigDecimal monthlyInstallment;
+    private BigDecimal outstandingBalance;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

@@ -1,5 +1,6 @@
 package com.example.customer.service.impl;
 
+import com.example.customer.common.PageResponse;
 import com.example.customer.dto.CustomerRequest;
 import com.example.customer.dto.CustomerResponse;
 import com.example.customer.entity.Customer;
@@ -8,10 +9,11 @@ import com.example.customer.exception.ResourceNotFoundException;
 import com.example.customer.repository.CustomerRepository;
 import com.example.customer.service.CustomerService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -47,10 +49,12 @@ public class CustomerServiceImpl implements CustomerService {
     }
 
     @Override
-    public List<CustomerResponse> getAll() {
-        return customerRepository.findAll().stream()
-                .map(this::toResponse)
-                .toList();
+    public PageResponse<CustomerResponse> getAll(int page, int size, String sortBy, String sortOrder) {
+        Sort sort = "asc".equalsIgnoreCase(sortOrder)
+                ? Sort.by(sortBy).ascending()
+                : Sort.by(sortBy).descending();
+        Pageable pageable = PageRequest.of(Math.max(page - 1, 0), size, sort);
+        return PageResponse.of(customerRepository.findAll(pageable).map(this::toResponse));
     }
 
     @Override

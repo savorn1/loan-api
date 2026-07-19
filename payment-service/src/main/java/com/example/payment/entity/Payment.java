@@ -36,4 +36,12 @@ public class Payment extends BaseEntity {
     private PaymentStatus status = PaymentStatus.PENDING;
 
     private String note;
+
+    private Integer installmentNumber;
+
+    @Column(precision = 15, scale = 2)
+    private BigDecimal principalComponent;
+
+    @Column(precision = 15, scale = 2)
+    private BigDecimal interestComponent;
 }

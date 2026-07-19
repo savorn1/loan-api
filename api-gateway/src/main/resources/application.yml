@@ -6,60 +6,62 @@ spring:
     name: api-gateway
   cloud:
     gateway:
-      discovery:
-        locator:
-          enabled: true
-          lower-case-service-id: true
-      routes:
-        # ── Business routes ────────────────────────────────────────────────────
-        - id: auth-service
-          uri: lb://auth-service
-          predicates:
-            - Path=/api/auth/**
+      server:
+        webflux:
+          discovery:
+            locator:
+              enabled: true
+              lower-case-service-id: true
+          routes:
+            # ── Business routes ────────────────────────────────────────────────
+            - id: auth-service
+              uri: lb://auth-service
+              predicates:
+                - Path=/api/auth/**
 
-        - id: customer-service
-          uri: lb://customer-service
-          predicates:
-            - Path=/api/customers/**
+            - id: customer-service
+              uri: lb://customer-service
+              predicates:
+                - Path=/api/customers/**
 
-        - id: loan-service
-          uri: lb://loan-service
-          predicates:
-            - Path=/api/loans/**
+            - id: loan-service
+              uri: lb://loan-service
+              predicates:
+                - Path=/api/loans/**
 
-        - id: payment-service
-          uri: lb://payment-service
-          predicates:
-            - Path=/api/payments/**
+            - id: payment-service
+              uri: lb://payment-service
+              predicates:
+                - Path=/api/payments/**
 
-        # ── OpenAPI docs routes (for gateway Swagger aggregation) ──────────────
-        - id: auth-service-docs
-          uri: lb://auth-service
-          predicates:
-            - Path=/v3/api-docs/auth-service
-          filters:
-            - RewritePath=/v3/api-docs/auth-service, /v3/api-docs
+            # ── OpenAPI docs routes (for gateway Swagger aggregation) ──────────
+            - id: auth-service-docs
+              uri: lb://auth-service
+              predicates:
+                - Path=/v3/api-docs/auth-service
+              filters:
+                - RewritePath=/v3/api-docs/auth-service, /v3/api-docs
 
-        - id: customer-service-docs
-          uri: lb://customer-service
-          predicates:
-            - Path=/v3/api-docs/customer-service
-          filters:
-            - RewritePath=/v3/api-docs/customer-service, /v3/api-docs
+            - id: customer-service-docs
+              uri: lb://customer-service
+              predicates:
+                - Path=/v3/api-docs/customer-service
+              filters:
+                - RewritePath=/v3/api-docs/customer-service, /v3/api-docs
 
-        - id: loan-service-docs
-          uri: lb://loan-service
-          predicates:
-            - Path=/v3/api-docs/loan-service
-          filters:
-            - RewritePath=/v3/api-docs/loan-service, /v3/api-docs
+            - id: loan-service-docs
+              uri: lb://loan-service
+              predicates:
+                - Path=/v3/api-docs/loan-service
+              filters:
+                - RewritePath=/v3/api-docs/loan-service, /v3/api-docs
 
-        - id: payment-service-docs
-          uri: lb://payment-service
-          predicates:
-            - Path=/v3/api-docs/payment-service
-          filters:
-            - RewritePath=/v3/api-docs/payment-service, /v3/api-docs
+            - id: payment-service-docs
+              uri: lb://payment-service
+              predicates:
+                - Path=/v3/api-docs/payment-service
+              filters:
+                - RewritePath=/v3/api-docs/payment-service, /v3/api-docs
 
 eureka:
   client:

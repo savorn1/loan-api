@@ -1,9 +1,8 @@
 package com.example.customer.service;
 
+import com.example.customer.common.PageResponse;
 import com.example.customer.dto.CustomerRequest;
 import com.example.customer.dto.CustomerResponse;
-
-import java.util.List;
 
 public interface CustomerService {
 
@@ -11,7 +10,7 @@ public interface CustomerService {
 
     CustomerResponse getById(Long id);
 
-    List<CustomerResponse> getAll();
+    PageResponse<CustomerResponse> getAll(int page, int size, String sortBy, String sortOrder);
 
     CustomerResponse update(Long id, CustomerRequest request);
 

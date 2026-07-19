@@ -1,5 +1,7 @@
 package com.example.payment.service;
 
+import com.example.payment.common.PageResponse;
+import com.example.payment.dto.GenerateScheduleRequest;
 import com.example.payment.dto.PaymentRequest;
 import com.example.payment.dto.PaymentResponse;
 
@@ -11,11 +13,13 @@ public interface PaymentService {
 
     PaymentResponse getById(Long id);
 
-    List<PaymentResponse> getAll();
+    PageResponse<PaymentResponse> getAll(int page, int size, String sortBy, String sortOrder);
 
     List<PaymentResponse> getByLoan(Long loanId);
 
     PaymentResponse markAsPaid(Long id);
+
+    List<PaymentResponse> createSchedule(GenerateScheduleRequest request);
 
     void delete(Long id);
 }

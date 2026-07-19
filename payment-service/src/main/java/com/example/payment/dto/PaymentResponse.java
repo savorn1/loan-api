@@ -19,6 +19,9 @@ public class PaymentResponse {
     private LocalDate paidAt;
     private PaymentStatus status;
     private String note;
+    private Integer installmentNumber;
+    private BigDecimal principalComponent;
+    private BigDecimal interestComponent;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

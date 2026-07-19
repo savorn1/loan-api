@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
@@ -41,4 +42,13 @@ public class Loan extends BaseEntity {
     private LocalDateTime approvedAt;
     private LocalDateTime rejectedAt;
     private LocalDateTime disbursedAt;
+    private LocalDateTime closedAt;
+
+    private LocalDate maturityDate;
+
+    @Column(precision = 15, scale = 2)
+    private BigDecimal monthlyInstallment;
+
+    @Column(precision = 15, scale = 2)
+    private BigDecimal outstandingBalance;
 }

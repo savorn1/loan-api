@@ -27,6 +27,8 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
     private static final List<String> PUBLIC_PATHS = List.of(
             "/api/auth/login",
             "/api/auth/register",
+            "/api/auth/refresh",
+            "/api/auth/logout",
             "/swagger-ui",
             "/v3/api-docs",
             "/webjars"
@@ -40,7 +42,15 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
         String path = exchange.getRequest().getPath().value();
 
         if (PUBLIC_PATHS.stream().anyMatch(path::startsWith)) {
-            return chain.filter(exchange);
+            // Still strip any client-forged identity headers on public paths (e.g. register/login) —
+            // defense in depth, even though today's public endpoints don't consume them.
+            ServerWebExchange sanitized = exchange.mutate()
+                    .request(r -> r.headers(headers -> {
+                        headers.remove("X-User-Name");
+                        headers.remove("X-User-Role");
+                    }))
+                    .build();
+            return chain.filter(sanitized);
         }
 
         String authHeader = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
@@ -53,10 +63,22 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
         String token = authHeader.substring(7);
         try {
             Claims claims = parseToken(token);
-            // Forward user identity to downstream services
+            // Forward user identity to downstream services.
+            // IMPORTANT: use headers(consumer) + set(...) rather than request(r -> r.header(...)).
+            // ServerHttpRequest.Builder#header(name, value) ADDS to any existing values for that
+            // header name instead of replacing them — since the mutate() builder starts from a
+            // copy of the original (client-supplied) headers, a caller who forges their own
+            // X-User-Name/X-User-Role header would have it survive as the *first* value, and
+            // downstream services read identity via HttpServletRequest#getHeader(), which
+            // returns the first value. That would let a spoofed header (e.g. X-User-Role: ADMIN)
+            // win over the value verified here from the JWT — a privilege-escalation hole in the
+            // "trust the perimeter" model every downstream service relies on. set(...) overwrites
+            // any inbound value instead of appending to it, closing that gap.
             ServerWebExchange mutated = exchange.mutate()
-                    .request(r -> r.header("X-User-Name", claims.getSubject())
-                                   .header("X-User-Role", claims.get("role", String.class)))
+                    .request(r -> r.headers(headers -> {
+                        headers.set("X-User-Name", claims.getSubject());
+                        headers.set("X-User-Role", claims.get("role", String.class));
+                    }))
                     .build();
             return chain.filter(mutated);
         } catch (Exception e) {

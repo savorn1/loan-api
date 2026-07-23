@@ -34,6 +34,66 @@ spring:
               predicates:
                 - Path=/api/payments/**
 
+            - id: loan-product-service
+              uri: lb://loan-product-service
+              predicates:
+                - Path=/api/loan-products/**
+
+            - id: loan-product-service-interest-schemes
+              uri: lb://loan-product-service
+              predicates:
+                - Path=/api/interest-schemes/**
+
+            - id: loan-product-service-fee-schemes
+              uri: lb://loan-product-service
+              predicates:
+                - Path=/api/fee-schemes/**
+
+            - id: loan-product-service-term-templates
+              uri: lb://loan-product-service
+              predicates:
+                - Path=/api/term-templates/**
+
+            - id: loan-product-service-rule-templates
+              uri: lb://loan-product-service
+              predicates:
+                - Path=/api/rule-templates/**
+
+            - id: loan-product-service-document-templates
+              uri: lb://loan-product-service
+              predicates:
+                - Path=/api/document-templates/**
+
+            - id: accounting-service-gl-accounts
+              uri: lb://accounting-service
+              predicates:
+                - Path=/api/gl-accounts/**
+
+            - id: accounting-service-journal-templates
+              uri: lb://accounting-service
+              predicates:
+                - Path=/api/journal-templates/**
+
+            - id: accounting-service-accounting-schemes
+              uri: lb://accounting-service
+              predicates:
+                - Path=/api/accounting-schemes/**
+
+            - id: accounting-service-financial-periods
+              uri: lb://accounting-service
+              predicates:
+                - Path=/api/financial-periods/**
+
+            - id: accounting-service-journal-entries
+              uri: lb://accounting-service
+              predicates:
+                - Path=/api/journal-entries/**
+
+            - id: accounting-service-trial-balance
+              uri: lb://accounting-service
+              predicates:
+                - Path=/api/trial-balance/**
+
             # ── OpenAPI docs routes (for gateway Swagger aggregation) ──────────
             - id: auth-service-docs
               uri: lb://auth-service
@@ -63,6 +123,20 @@ spring:
               filters:
                 - RewritePath=/v3/api-docs/payment-service, /v3/api-docs
 
+            - id: loan-product-service-docs
+              uri: lb://loan-product-service
+              predicates:
+                - Path=/v3/api-docs/loan-product-service
+              filters:
+                - RewritePath=/v3/api-docs/loan-product-service, /v3/api-docs
+
+            - id: accounting-service-docs
+              uri: lb://accounting-service
+              predicates:
+                - Path=/v3/api-docs/accounting-service
+              filters:
+                - RewritePath=/v3/api-docs/accounting-service, /v3/api-docs
+
 eureka:
   client:
     service-url:
@@ -89,9 +163,38 @@ springdoc:
         url: /v3/api-docs/loan-service
       - name: payment-service
         url: /v3/api-docs/payment-service
+      - name: loan-product-service
+        url: /v3/api-docs/loan-product-service
+      - name: accounting-service
+        url: /v3/api-docs/accounting-service
 
 management:
   endpoints:
     web:
       exposure:
         include: health,info,gateway
+
+---
+# Dev-only: allows any origin to call this gateway directly, without going
+# through the frontend's Nitro proxy.
+spring:
+  config:
+    activate:
+      on-profile: dev
+  cloud:
+    gateway:
+      server:
+        webflux:
+          globalcors:
+            cors-configurations:
+              '[/**]':
+                allowedOriginPatterns: '*'
+                allowedMethods:
+                  - GET
+                  - POST
+                  - PUT
+                  - PATCH
+                  - DELETE
+                  - OPTIONS
+                allowedHeaders: '*'
+                allowCredentials: true

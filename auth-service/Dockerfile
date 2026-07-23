@@ -8,6 +8,7 @@ COPY auth-service/pom.xml      auth-service/
 COPY customer-service/pom.xml  customer-service/
 COPY loan-service/pom.xml      loan-service/
 COPY payment-service/pom.xml   payment-service/
+COPY loan-product-service/pom.xml loan-product-service/
 
 RUN mvn dependency:go-offline -pl auth-service -am -q || true
 

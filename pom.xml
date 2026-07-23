@@ -24,6 +24,8 @@
         <module>customer-service</module>
         <module>loan-service</module>
         <module>payment-service</module>
+        <module>loan-product-service</module>
+        <module>accounting-service</module>
     </modules>
 
     <properties>

@@ -1,0 +1,8 @@
+package com.example.customer.entity;
+
+public enum MaritalStatus {
+    SINGLE,
+    MARRIED,
+    DIVORCED,
+    WIDOWED
+}

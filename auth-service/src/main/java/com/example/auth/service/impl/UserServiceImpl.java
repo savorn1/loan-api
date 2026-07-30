@@ -6,10 +6,12 @@ import com.example.auth.dto.UpdateRoleRequest;
 import com.example.auth.dto.UpdateStatusRequest;
 import com.example.auth.dto.UserFilterRequest;
 import com.example.auth.dto.UserResponse;
-import com.example.auth.entity.User;
+import com.example.auth.entity.SysUser;
+import com.example.auth.entity.UserStatus;
 import com.example.auth.exception.AppException;
+import com.example.auth.redis.UserSessionStore;
 import com.example.auth.repository.RefreshTokenRepository;
-import com.example.auth.repository.UserRepository;
+import com.example.auth.repository.SysUserRepository;
 import com.example.auth.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -29,14 +31,15 @@ import java.util.List;
 @RequiredArgsConstructor
 public class UserServiceImpl implements UserService {
 
-    private final UserRepository userRepository;
+    private final SysUserRepository userRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
+    private final UserSessionStore userSessionStore;
 
     @Override
     @Transactional(readOnly = true)
     public PageResponse<UserResponse> listUsers(UserFilterRequest filter) {
-        List<Specification<User>> conditions = new ArrayList<>();
+        List<Specification<SysUser>> conditions = new ArrayList<>();
 
         if (filter.getUsername() != null && !filter.getUsername().isBlank()) {
             conditions.add((root, query, cb) ->
@@ -45,8 +48,8 @@ public class UserServiceImpl implements UserService {
         if (filter.getRole() != null) {
             conditions.add((root, query, cb) -> cb.equal(root.get("role"), filter.getRole()));
         }
-        if (filter.getActive() != null) {
-            conditions.add((root, query, cb) -> cb.equal(root.get("active"), filter.getActive()));
+        if (filter.getStatus() != null) {
+            conditions.add((root, query, cb) -> cb.equal(root.get("status"), filter.getStatus()));
         }
         if (filter.getStartDate() != null) {
             conditions.add((root, query, cb) ->
@@ -56,7 +59,7 @@ public class UserServiceImpl implements UserService {
             conditions.add((root, query, cb) ->
                     cb.lessThanOrEqualTo(root.get("createdAt"), filter.getEndDate().atTime(23, 59, 59)));
         }
-        Specification<User> spec = Specification.allOf(conditions);
+        Specification<SysUser> spec = Specification.allOf(conditions);
 
         Sort sort = "asc".equalsIgnoreCase(filter.getSortOrder())
                 ? Sort.by(filter.getSortBy()).ascending()
@@ -78,11 +81,11 @@ public class UserServiceImpl implements UserService {
         if (userRepository.existsByUsername(request.getUsername())) {
             throw new AppException(HttpStatus.CONFLICT, "Username already taken: " + request.getUsername());
         }
-        User user = User.builder()
+        SysUser user = SysUser.builder()
                 .username(request.getUsername())
                 .password(passwordEncoder.encode(request.getPassword()))
                 .role(request.getRole())
-                .active(request.getActive())
+                .status(request.getStatus())
                 .build();
         userRepository.save(user);
         return toResponse(user);
@@ -91,7 +94,7 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional
     public UserResponse updateRole(Long id, UpdateRoleRequest request, String actingUsername) {
-        User user = findUser(id);
+        SysUser user = findUser(id);
         // An admin can't demote themselves — would leave the system with no way to undo it.
         if (user.getUsername().equals(actingUsername) && user.getRole() != request.getRole()) {
             throw new AppException(HttpStatus.BAD_REQUEST, "You cannot change your own role");
@@ -99,20 +102,22 @@ public class UserServiceImpl implements UserService {
         user.setRole(request.getRole());
         userRepository.save(user);
         refreshTokenRepository.revokeAllForUser(user.getId());
+        userSessionStore.delete(user.getUuid().toString());
         return toResponse(user);
     }
 
     @Override
     @Transactional
     public UserResponse updateStatus(Long id, UpdateStatusRequest request, String actingUsername) {
-        User user = findUser(id);
-        if (user.getUsername().equals(actingUsername) && !request.getActive()) {
+        SysUser user = findUser(id);
+        if (user.getUsername().equals(actingUsername) && request.getStatus() == UserStatus.INACTIVE) {
             throw new AppException(HttpStatus.BAD_REQUEST, "You cannot deactivate your own account");
         }
-        user.setActive(request.getActive());
+        user.setStatus(request.getStatus());
         userRepository.save(user);
-        if (!user.isActive()) {
+        if (user.getStatus() == UserStatus.INACTIVE) {
             refreshTokenRepository.revokeAllForUser(user.getId());
+            userSessionStore.delete(user.getUuid().toString());
         }
         return toResponse(user);
     }
@@ -120,11 +125,12 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional
     public void deleteUser(Long id, String actingUsername) {
-        User user = findUser(id);
+        SysUser user = findUser(id);
         if (user.getUsername().equals(actingUsername)) {
             throw new AppException(HttpStatus.BAD_REQUEST, "You cannot delete your own account");
         }
         refreshTokenRepository.revokeAllForUser(user.getId());
+        userSessionStore.delete(user.getUuid().toString());
         userRepository.delete(user);
     }
 
@@ -136,14 +142,17 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional
     public String deleteUsers(List<Long> ids, String actingUsername) {
-        List<User> users = userRepository.findAllById(ids);
+        List<SysUser> users = userRepository.findAllById(ids);
         if (users.isEmpty()) {
             return "No users found for the provided IDs.";
         }
         if (users.stream().anyMatch(u -> u.getUsername().equals(actingUsername))) {
             throw new AppException(HttpStatus.BAD_REQUEST, "You cannot delete your own account");
         }
-        users.forEach(u -> refreshTokenRepository.revokeAllForUser(u.getId()));
+        users.forEach(u -> {
+            refreshTokenRepository.revokeAllForUser(u.getId());
+            userSessionStore.delete(u.getUuid().toString());
+        });
         userRepository.deleteAll(users);
         return "Deleted " + users.size() + " user(s) successfully.";
     }
@@ -151,28 +160,32 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional
     public void forceLogout(Long id) {
-        User user = findUser(id);
-        // Only revokes refresh tokens; any access token the user already holds stays valid until it expires naturally.
+        SysUser user = findUser(id);
+        // Only revokes refresh tokens and the cached permission session; any access
+        // token the user already holds stays valid until it expires naturally.
         refreshTokenRepository.revokeAllForUser(user.getId());
+        userSessionStore.delete(user.getUuid().toString());
     }
 
     @Override
     @Transactional
     public void forceLogoutAll() {
         refreshTokenRepository.revokeAll();
+        userSessionStore.deleteAll();
     }
 
-    private User findUser(Long id) {
+    private SysUser findUser(Long id) {
         return userRepository.findById(id)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "User not found with id: " + id));
     }
 
-    private UserResponse toResponse(User user) {
+    private UserResponse toResponse(SysUser user) {
         return UserResponse.builder()
                 .id(user.getId())
+                .uuid(user.getUuid().toString())
                 .username(user.getUsername())
                 .role(user.getRole().name())
-                .active(user.isActive())
+                .status(user.getStatus().name())
                 .createdAt(user.getCreatedAt())
                 .updatedAt(user.getUpdatedAt())
                 .build();

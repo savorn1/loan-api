@@ -127,7 +127,7 @@ public class LoanServiceImpl implements LoanService {
 
     @Override
     public LoanResponse create(LoanRequest request) {
-        CustomerResponse customer = customerClient.getById(request.getCustomerId());
+        CustomerResponse customer = customerClient.getById(request.getCustomerId()).getData();
 
         Loan loan = Loan.builder()
                 .customerId(request.getCustomerId())
@@ -145,7 +145,7 @@ public class LoanServiceImpl implements LoanService {
     @Override
     public LoanResponse getById(Long id) {
         Loan loan = findOrThrow(id);
-        CustomerResponse customer = customerClient.getById(loan.getCustomerId());
+        CustomerResponse customer = customerClient.getById(loan.getCustomerId()).getData();
         return toResponse(loan, customer);
     }
 
@@ -156,14 +156,14 @@ public class LoanServiceImpl implements LoanService {
                 : Sort.by(sortBy).descending();
         Pageable pageable = PageRequest.of(Math.max(page - 1, 0), size, sort);
         return PageResponse.of(loanRepository.findAll(pageable)
-                .map(loan -> toResponse(loan, customerClient.getById(loan.getCustomerId()))));
+                .map(loan -> toResponse(loan, customerClient.getById(loan.getCustomerId()).getData())));
     }
 
     @Override
     public List<LoanResponse> getByCustomer(Long customerId) {
         customerClient.getById(customerId);
         return loanRepository.findByCustomerId(customerId).stream()
-                .map(loan -> toResponse(loan, customerClient.getById(loan.getCustomerId())))
+                .map(loan -> toResponse(loan, customerClient.getById(loan.getCustomerId()).getData()))
                 .toList();
     }
 
@@ -178,7 +178,7 @@ public class LoanServiceImpl implements LoanService {
         loan.setApprovedAt(LocalDateTime.now());
         Loan saved = loanRepository.save(loan);
         recordStatusHistory(saved, previousStatus, LoanStatus.APPROVED, null);
-        CustomerResponse customer = customerClient.getById(saved.getCustomerId());
+        CustomerResponse customer = customerClient.getById(saved.getCustomerId()).getData();
         return toResponse(saved, customer);
     }
 
@@ -193,7 +193,7 @@ public class LoanServiceImpl implements LoanService {
         loan.setRejectedAt(LocalDateTime.now());
         Loan saved = loanRepository.save(loan);
         recordStatusHistory(saved, previousStatus, LoanStatus.REJECTED, null);
-        CustomerResponse customer = customerClient.getById(saved.getCustomerId());
+        CustomerResponse customer = customerClient.getById(saved.getCustomerId()).getData();
         return toResponse(saved, customer);
     }
 
@@ -242,7 +242,7 @@ public class LoanServiceImpl implements LoanService {
         recordTransaction(saved, TransactionType.DISBURSEMENT, saved.getPrincipal(), disbursementDate,
                 "Loan", saved.getId(), null);
 
-        CustomerResponse customer = customerClient.getById(saved.getCustomerId());
+        CustomerResponse customer = customerClient.getById(saved.getCustomerId()).getData();
         return toResponse(saved, customer);
     }
 
@@ -268,7 +268,7 @@ public class LoanServiceImpl implements LoanService {
         }
         recordTransaction(saved, TransactionType.PRINCIPAL_PAYMENT, request.getAmount(), LocalDate.now(),
                 "Loan", saved.getId(), "Applied via legacy apply-payment action");
-        CustomerResponse customer = customerClient.getById(saved.getCustomerId());
+        CustomerResponse customer = customerClient.getById(saved.getCustomerId()).getData();
         return toResponse(saved, customer);
     }
 

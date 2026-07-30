@@ -30,7 +30,7 @@ public class GlobalExceptionHandler {
         boolean anonymous = auth == null || auth instanceof AnonymousAuthenticationToken;
         int code = anonymous ? 401 : 403;
         ApiResponse<Void> response = ApiResponse.error(code, anonymous ? "Authentication required" : "Access denied");
-        log.warn("traceId={} status={} message={}", response.getTraceId(), code, response.getMessage());
+        log.warn("traceId={} status={} message={}", response.getTraceId(), code, response.getMessage(), ex);
         return ResponseEntity.status(code).body(response);
     }
 
@@ -38,14 +38,14 @@ public class GlobalExceptionHandler {
     ResponseEntity<ApiResponse<Void>> handleAppException(AppException ex) {
         int code = ex.getStatus().value();
         ApiResponse<Void> response = ApiResponse.error(code, ex.getMessage());
-        log.warn("traceId={} status={} message={}", response.getTraceId(), code, ex.getMessage());
+        log.warn("traceId={} status={} message={}", response.getTraceId(), code, ex.getMessage(), ex);
         return ResponseEntity.status(code).body(response);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
     ResponseEntity<ApiResponse<Void>> handleBadRequest(IllegalArgumentException ex) {
         ApiResponse<Void> response = ApiResponse.error(400, ex.getMessage());
-        log.warn("traceId={} status=400 message={}", response.getTraceId(), ex.getMessage());
+        log.warn("traceId={} status=400 message={}", response.getTraceId(), ex.getMessage(), ex);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
     }
 
@@ -54,20 +54,21 @@ public class GlobalExceptionHandler {
         Map<String, String> errors = ex.getBindingResult().getFieldErrors().stream()
                 .collect(Collectors.toMap(FieldError::getField, FieldError::getDefaultMessage, (a, b) -> a));
         ApiResponse<Map<String, String>> response = new ApiResponse<>(400, "Validation failed", errors);
-        log.warn("traceId={} status=400 validation={}", response.getTraceId(), errors);
+        log.warn("traceId={} status=400 validation={}", response.getTraceId(), errors, ex);
         return ResponseEntity.badRequest().body(response);
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)
     ResponseEntity<ApiResponse<Void>> handleDataIntegrity(DataIntegrityViolationException ex) {
         ApiResponse<Void> response = ApiResponse.error(409, "Data conflict: resource already exists or constraint violated");
-        log.warn("traceId={} status=409 message={}", response.getTraceId(), ex.getMostSpecificCause().getMessage());
+        log.warn("traceId={} status=409 message={}", response.getTraceId(), ex.getMostSpecificCause().getMessage(), ex);
         return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
     }
 
     @ExceptionHandler(NoResourceFoundException.class)
     ResponseEntity<ApiResponse<Void>> handleNoResource(NoResourceFoundException ex) {
         ApiResponse<Void> response = ApiResponse.error(404, ex.getMessage());
+        log.warn("traceId={} status=404 message={}", response.getTraceId(), ex.getMessage(), ex);
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
     }
 

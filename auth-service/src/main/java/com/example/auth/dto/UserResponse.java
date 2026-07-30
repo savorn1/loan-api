@@ -14,9 +14,10 @@ import java.time.LocalDateTime;
 public class UserResponse {
 
     private Long id;
+    private String uuid;
     private String username;
     private String role;
-    private boolean active;
+    private String status;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

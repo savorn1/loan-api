@@ -54,7 +54,7 @@ public class ApplicationServiceImpl implements ApplicationService {
 
     @Override
     public ApplicationResponse create(ApplicationRequest request) {
-        CustomerResponse customer = customerClient.getById(request.getCustomerId());
+        CustomerResponse customer = customerClient.getById(request.getCustomerId()).getData();
 
         Application application = Application.builder()
                 .customerId(request.getCustomerId())
@@ -71,7 +71,7 @@ public class ApplicationServiceImpl implements ApplicationService {
     @Override
     public ApplicationResponse getById(Long id) {
         Application application = findOrThrow(id);
-        return toResponse(application, customerClient.getById(application.getCustomerId()));
+        return toResponse(application, customerClient.getById(application.getCustomerId()).getData());
     }
 
     @Override
@@ -81,14 +81,14 @@ public class ApplicationServiceImpl implements ApplicationService {
                 : Sort.by(sortBy).descending();
         Pageable pageable = PageRequest.of(Math.max(page - 1, 0), size, sort);
         return PageResponse.of(applicationRepository.findAll(pageable)
-                .map(application -> toResponse(application, customerClient.getById(application.getCustomerId()))));
+                .map(application -> toResponse(application, customerClient.getById(application.getCustomerId()).getData())));
     }
 
     @Override
     public List<ApplicationResponse> getByCustomer(Long customerId) {
         customerClient.getById(customerId);
         return applicationRepository.findByCustomerId(customerId).stream()
-                .map(application -> toResponse(application, customerClient.getById(application.getCustomerId())))
+                .map(application -> toResponse(application, customerClient.getById(application.getCustomerId()).getData()))
                 .toList();
     }
 
@@ -101,7 +101,7 @@ public class ApplicationServiceImpl implements ApplicationService {
         application.setRequestedAmount(request.getRequestedAmount());
         application.setRequestedTermMonths(request.getRequestedTermMonths());
         application.setPurpose(request.getPurpose());
-        CustomerResponse customer = customerClient.getById(application.getCustomerId());
+        CustomerResponse customer = customerClient.getById(application.getCustomerId()).getData();
         return toResponse(applicationRepository.save(application), customer);
     }
 
@@ -112,7 +112,7 @@ public class ApplicationServiceImpl implements ApplicationService {
             throw new AppException(HttpStatus.CONFLICT, "Only SUBMITTED applications can start review");
         }
         application.setStatus(ApplicationStatus.UNDER_REVIEW);
-        CustomerResponse customer = customerClient.getById(application.getCustomerId());
+        CustomerResponse customer = customerClient.getById(application.getCustomerId()).getData();
         return toResponse(applicationRepository.save(application), customer);
     }
 
@@ -124,7 +124,7 @@ public class ApplicationServiceImpl implements ApplicationService {
         }
         application.setStatus(ApplicationStatus.WITHDRAWN);
         application.setDecidedAt(LocalDateTime.now());
-        CustomerResponse customer = customerClient.getById(application.getCustomerId());
+        CustomerResponse customer = customerClient.getById(application.getCustomerId()).getData();
         return toResponse(applicationRepository.save(application), customer);
     }
 
@@ -232,7 +232,7 @@ public class ApplicationServiceImpl implements ApplicationService {
         }
         applicationRepository.save(application);
 
-        return toResponse(application, customerClient.getById(application.getCustomerId()));
+        return toResponse(application, customerClient.getById(application.getCustomerId()).getData());
     }
 
     private Application findOrThrow(Long id) {

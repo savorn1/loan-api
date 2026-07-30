@@ -18,6 +18,10 @@ public class NotificationRequest {
     @NotNull
     private NotificationChannel channel;
 
+    // The actual delivery address (email/phone) — required for EMAIL to
+    // actually send; optional otherwise (SMS/PUSH/IN_APP stay simulated).
+    private String recipientContact;
+
     private String subject;
 
     @NotBlank

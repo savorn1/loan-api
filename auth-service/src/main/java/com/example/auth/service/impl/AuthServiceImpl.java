@@ -2,15 +2,19 @@ package com.example.auth.service.impl;
 
 import com.example.auth.dto.AuthResponse;
 import com.example.auth.dto.ChangePasswordRequest;
+import com.example.auth.dto.JwtUserClaims;
 import com.example.auth.dto.LoginRequest;
 import com.example.auth.dto.LogoutRequest;
 import com.example.auth.dto.RefreshRequest;
 import com.example.auth.dto.RegisterRequest;
+import com.example.auth.entity.Permission;
 import com.example.auth.entity.RefreshToken;
-import com.example.auth.entity.User;
+import com.example.auth.entity.SysUser;
+import com.example.auth.entity.UserStatus;
 import com.example.auth.exception.AppException;
+import com.example.auth.redis.UserSessionStore;
 import com.example.auth.repository.RefreshTokenRepository;
-import com.example.auth.repository.UserRepository;
+import com.example.auth.repository.SysUserRepository;
 import com.example.auth.service.AuthService;
 import com.example.auth.service.JwtService;
 import lombok.RequiredArgsConstructor;
@@ -22,52 +26,59 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 public class AuthServiceImpl implements AuthService {
 
-    private final UserRepository userRepository;
+    private final SysUserRepository userRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final UserSessionStore userSessionStore;
 
     @Value("${jwt.refresh-expiration}")
     private long refreshExpiration;
 
     @Override
+    @Transactional
     public AuthResponse register(RegisterRequest request) {
         if (userRepository.existsByUsername(request.getUsername())) {
             throw new AppException(HttpStatus.CONFLICT, "Username already taken: " + request.getUsername());
         }
 
-        User user = User.builder()
+        SysUser user = SysUser.builder()
                 .username(request.getUsername())
                 .password(passwordEncoder.encode(request.getPassword()))
                 .build();
 
         userRepository.save(user);
+        saveSession(user);
 
-        String token = jwtService.generateToken(user.getUsername(), user.getRole().name());
+        String token = jwtService.generateToken(user.getUsername(), user.getRole().name(), user.getUuid().toString());
         String refreshToken = issueRefreshToken(user);
         return buildAuthResponse(token, refreshToken, user);
     }
 
     @Override
+    @Transactional
     public AuthResponse login(LoginRequest request) {
-        User user = userRepository.findByUsername(request.getUsername())
+        SysUser user = userRepository.findByUsername(request.getUsername())
                 .orElseThrow(() -> new AppException(HttpStatus.UNAUTHORIZED, "Invalid credentials"));
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
             throw new AppException(HttpStatus.UNAUTHORIZED, "Invalid credentials");
         }
 
-        if (!user.isActive()) {
+        if (user.getStatus() != UserStatus.ACTIVE) {
             throw new AppException(HttpStatus.FORBIDDEN, "Account is disabled");
         }
 
-        String token = jwtService.generateToken(user.getUsername(), user.getRole().name());
+        saveSession(user);
+
+        String token = jwtService.generateToken(user.getUsername(), user.getRole().name(), user.getUuid().toString());
         String refreshToken = issueRefreshToken(user);
         return buildAuthResponse(token, refreshToken, user);
     }
@@ -82,10 +93,10 @@ public class AuthServiceImpl implements AuthService {
             throw new AppException(HttpStatus.UNAUTHORIZED, "Refresh token expired or revoked");
         }
 
-        User user = userRepository.findById(stored.getUserId())
+        SysUser user = userRepository.findById(stored.getUserId())
                 .orElseThrow(() -> new AppException(HttpStatus.UNAUTHORIZED, "Invalid refresh token"));
 
-        if (!user.isActive()) {
+        if (user.getStatus() != UserStatus.ACTIVE) {
             throw new AppException(HttpStatus.FORBIDDEN, "Account is disabled");
         }
 
@@ -93,24 +104,39 @@ public class AuthServiceImpl implements AuthService {
         stored.setRevoked(true);
         refreshTokenRepository.save(stored);
 
-        String token = jwtService.generateToken(user.getUsername(), user.getRole().name());
+        // Re-save the cached session too: permissions may have changed since the last login.
+        saveSession(user);
+
+        String token = jwtService.generateToken(user.getUsername(), user.getRole().name(), user.getUuid().toString());
         String newRefreshToken = issueRefreshToken(user);
         return buildAuthResponse(token, newRefreshToken, user);
     }
 
     @Override
+    @Transactional
     public void logout(LogoutRequest request) {
         refreshTokenRepository.findByToken(request.getRefreshToken())
                 .ifPresent(stored -> {
                     stored.setRevoked(true);
                     refreshTokenRepository.save(stored);
+                    userRepository.findById(stored.getUserId())
+                            .ifPresent(user -> userSessionStore.delete(user.getUuid().toString()));
                 });
+    }
+
+    @Override
+    public JwtUserClaims getProfile(String uuid) {
+        JwtUserClaims claims = userSessionStore.get(uuid);
+        if (claims == null) {
+            throw new AppException(HttpStatus.UNAUTHORIZED, "Session expired or not found — please log in again");
+        }
+        return claims;
     }
 
     @Override
     @Transactional
     public void changePassword(String username, ChangePasswordRequest request) {
-        User user = userRepository.findByUsername(username)
+        SysUser user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new AppException(HttpStatus.UNAUTHORIZED, "Invalid credentials"));
 
         if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
@@ -121,9 +147,27 @@ public class AuthServiceImpl implements AuthService {
         userRepository.save(user);
         // Force re-login everywhere else after a password change.
         refreshTokenRepository.revokeAllForUser(user.getId());
+        userSessionStore.delete(user.getUuid().toString());
     }
 
-    private String issueRefreshToken(User user) {
+    private void saveSession(SysUser user) {
+        List<String> permissions = user.getRoles().stream()
+                .flatMap(role -> role.getPermissions().stream())
+                .map(Permission::getName)
+                .distinct()
+                .sorted()
+                .toList();
+
+        userSessionStore.save(JwtUserClaims.builder()
+                .id(user.getId())
+                .username(user.getUsername())
+                .uuid(user.getUuid().toString())
+                .role(user.getRole().name())
+                .permissions(permissions)
+                .build());
+    }
+
+    private String issueRefreshToken(SysUser user) {
         String token = UUID.randomUUID().toString();
         refreshTokenRepository.save(RefreshToken.builder()
                 .token(token)
@@ -133,7 +177,7 @@ public class AuthServiceImpl implements AuthService {
         return token;
     }
 
-    private AuthResponse buildAuthResponse(String token, String refreshToken, User user) {
+    private AuthResponse buildAuthResponse(String token, String refreshToken, SysUser user) {
         return AuthResponse.builder()
                 .accessToken(token)
                 .refreshToken(refreshToken)

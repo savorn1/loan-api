@@ -16,6 +16,7 @@ import java.util.List;
 public class OverdueScheduler {
 
     private final PaymentRepository paymentRepository;
+    private final PaymentReminderNotifier reminderNotifier;
 
     @Scheduled(cron = "0 0 1 * * *")
     @Transactional
@@ -23,5 +24,14 @@ public class OverdueScheduler {
         List<Payment> overdue = paymentRepository.findByDueDateBeforeAndStatus(LocalDate.now(), PaymentStatus.PENDING);
         overdue.forEach(p -> p.setStatus(PaymentStatus.OVERDUE));
         paymentRepository.saveAll(overdue);
+
+        // Notify for exactly the rows just flipped in this run — querying by
+        // status=OVERDUE instead would re-notify every day for as long as a
+        // payment stays unpaid, since nothing else changes its status back.
+        for (Payment payment : overdue) {
+            reminderNotifier.notify(payment, "Payment overdue",
+                    String.format("Your payment of %s for loan #%d (due %s) is now overdue.",
+                            payment.getAmount(), payment.getLoanId(), payment.getDueDate()));
+        }
     }
 }

@@ -1,5 +1,6 @@
 package com.example.auth.dto;
 
+import com.example.auth.entity.UserStatus;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
@@ -7,5 +8,5 @@ import lombok.Data;
 public class UpdateStatusRequest {
 
     @NotNull
-    private Boolean active;
+    private UserStatus status;
 }

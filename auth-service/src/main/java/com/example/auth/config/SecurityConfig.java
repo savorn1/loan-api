@@ -1,6 +1,8 @@
 package com.example.auth.config;
 
-import com.example.auth.repository.UserRepository;
+import com.example.auth.redis.UserSessionStore;
+import com.example.auth.repository.SysUserRepository;
+import com.example.auth.service.JwtService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -26,17 +28,19 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @RequiredArgsConstructor
 public class SecurityConfig {
 
-    private final UserRepository userRepository;
+    private final SysUserRepository userRepository;
+    private final JwtService jwtService;
+    private final UserSessionStore userSessionStore;
 
     @Bean
     SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
             .csrf(AbstractHttpConfigurer::disable)
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-            // JWT validation for protected auth endpoints (e.g. change-password) is done by
-            // the gateway; this reads its X-User-Name/X-User-Role headers so Authentication
-            // is populated here too, same pattern as the other services.
-            .addFilterBefore(new HeaderAuthenticationFilter(), UsernamePasswordAuthenticationFilter.class)
+            // Verifies the JWT itself (same as customer/loan/payment-service) and adds the
+            // caller's cached Redis permissions as authorities, so hasAuthority(...) checks
+            // work alongside the existing hasRole('ADMIN') ones.
+            .addFilterBefore(new JwtAuthenticationFilter(jwtService, userSessionStore), UsernamePasswordAuthenticationFilter.class)
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(
                         "/api/auth/**",

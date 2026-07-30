@@ -1,6 +1,7 @@
 package com.example.auth.dto;
 
 import com.example.auth.entity.Role;
+import com.example.auth.entity.UserStatus;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -20,5 +21,5 @@ public class CreateUserRequest {
     private Role role = Role.USER;
 
     @NotNull
-    private Boolean active = true;
+    private UserStatus status = UserStatus.ACTIVE;
 }

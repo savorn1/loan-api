@@ -2,6 +2,7 @@ package com.example.auth.service;
 
 import com.example.auth.dto.AuthResponse;
 import com.example.auth.dto.ChangePasswordRequest;
+import com.example.auth.dto.JwtUserClaims;
 import com.example.auth.dto.LoginRequest;
 import com.example.auth.dto.LogoutRequest;
 import com.example.auth.dto.RefreshRequest;
@@ -16,6 +17,8 @@ public interface AuthService {
     AuthResponse refresh(RefreshRequest request);
 
     void logout(LogoutRequest request);
+
+    JwtUserClaims getProfile(String uuid);
 
     void changePassword(String username, ChangePasswordRequest request);
 }

@@ -1,12 +1,14 @@
 package com.example.auth.config;
 
 import com.example.auth.entity.Role;
-import com.example.auth.entity.User;
-import com.example.auth.repository.UserRepository;
+import com.example.auth.entity.SysUser;
+import com.example.auth.entity.UserStatus;
+import com.example.auth.repository.SysUserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.core.annotation.Order;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
@@ -15,9 +17,10 @@ import org.springframework.stereotype.Component;
 @Component
 @RequiredArgsConstructor
 @Slf4j
+@Order(1) // must run before RbacSeeder, which attaches the RBAC ADMIN role to this user
 public class AdminSeeder implements CommandLineRunner {
 
-    private final UserRepository userRepository;
+    private final SysUserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
 
     @Value("${seed.admin.enabled:true}")
@@ -34,11 +37,11 @@ public class AdminSeeder implements CommandLineRunner {
         if (!enabled || userRepository.existsByUsername(adminUsername)) {
             return;
         }
-        userRepository.save(User.builder()
+        userRepository.save(SysUser.builder()
                 .username(adminUsername)
                 .password(passwordEncoder.encode(adminPassword))
                 .role(Role.ADMIN)
-                .active(true)
+                .status(UserStatus.ACTIVE)
                 .build());
         log.info("Seeded default admin user '{}' (change this password before deploying anywhere real)", adminUsername);
     }

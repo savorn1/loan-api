@@ -27,7 +27,7 @@ public class GlobalExceptionHandler {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         boolean anonymous = auth == null || auth instanceof AnonymousAuthenticationToken;
         HttpStatus status = anonymous ? HttpStatus.UNAUTHORIZED : HttpStatus.FORBIDDEN;
-        log.warn("status={} message=Access denied", status.value());
+        log.warn("status={} message=Access denied", status.value(), ex);
         return ResponseEntity.status(status).body(Map.of(
                 "statusCode", status.value(),
                 "message", anonymous ? "Authentication required" : "Access denied"));
@@ -35,7 +35,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(AppException.class)
     ResponseEntity<Map<String, Object>> handleAppException(AppException ex) {
-        log.warn("status={} message={}", ex.getStatus().value(), ex.getMessage());
+        log.warn("status={} message={}", ex.getStatus().value(), ex.getMessage(), ex);
         return ResponseEntity.status(ex.getStatus())
                 .body(Map.of("statusCode", ex.getStatus().value(), "message", ex.getMessage()));
     }
@@ -44,12 +44,14 @@ public class GlobalExceptionHandler {
     ResponseEntity<Map<String, Object>> handleValidation(MethodArgumentNotValidException ex) {
         Map<String, String> errors = ex.getBindingResult().getFieldErrors().stream()
                 .collect(Collectors.toMap(FieldError::getField, FieldError::getDefaultMessage, (a, b) -> a));
+        log.warn("status=400 message=Validation failed errors={}", errors, ex);
         return ResponseEntity.badRequest()
                 .body(Map.of("statusCode", 400, "message", "Validation failed", "errors", errors));
     }
 
     @ExceptionHandler(NoResourceFoundException.class)
     ResponseEntity<Map<String, Object>> handleNoResource(NoResourceFoundException ex) {
+        log.warn("status=404 message={}", ex.getMessage(), ex);
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(Map.of("statusCode", 404, "message", ex.getMessage()));
     }

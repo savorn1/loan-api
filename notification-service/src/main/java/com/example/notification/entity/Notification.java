@@ -31,6 +31,12 @@ public class Notification extends BaseEntity {
     @Column(nullable = false)
     private NotificationChannel channel;
 
+    // The actual delivery address (email/phone) for a real sender to send to.
+    // Notification deliberately has no FK to customer-service/auth-service (see
+    // recipientId above), so the caller — who already has this from its own
+    // lookup — passes it in directly instead of this service resolving it itself.
+    private String recipientContact;
+
     private String subject;
 
     @Column(nullable = false, columnDefinition = "TEXT")

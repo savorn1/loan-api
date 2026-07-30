@@ -3,6 +3,7 @@ package com.example.auth.controller;
 import com.example.auth.dto.ApiResponse;
 import com.example.auth.dto.AuthResponse;
 import com.example.auth.dto.ChangePasswordRequest;
+import com.example.auth.dto.JwtUserClaims;
 import com.example.auth.dto.LoginRequest;
 import com.example.auth.dto.LogoutRequest;
 import com.example.auth.dto.RefreshRequest;
@@ -47,6 +48,18 @@ public class AuthController {
     public ResponseEntity<ApiResponse<Void>> logout(@Valid @RequestBody LogoutRequest request) {
         authService.logout(request);
         return ResponseEntity.ok(ApiResponse.success("Logged out successfully", null));
+    }
+
+    @GetMapping("/profile")
+    public ResponseEntity<ApiResponse<JwtUserClaims>> profile(@RequestHeader("Authorization") String authHeader) {
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            throw new AppException(HttpStatus.UNAUTHORIZED, "Missing token");
+        }
+        String token = authHeader.substring(7);
+        if (!jwtService.isValid(token)) {
+            throw new AppException(HttpStatus.UNAUTHORIZED, "Invalid or expired token");
+        }
+        return ResponseEntity.ok(ApiResponse.success(authService.getProfile(jwtService.extractUuid(token))));
     }
 
     @PutMapping("/change-password")

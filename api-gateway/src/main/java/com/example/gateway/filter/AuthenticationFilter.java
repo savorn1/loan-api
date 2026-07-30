@@ -82,7 +82,7 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
                     .build();
             return chain.filter(mutated);
         } catch (Exception e) {
-            log.warn("Invalid JWT token: {}", e.getMessage());
+            log.warn("Invalid JWT token: {}", e.getMessage(), e);
             exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
             return exchange.getResponse().setComplete();
         }

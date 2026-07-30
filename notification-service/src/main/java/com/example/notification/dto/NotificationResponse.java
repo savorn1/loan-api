@@ -16,6 +16,7 @@ public class NotificationResponse {
     private RecipientType recipientType;
     private Long recipientId;
     private NotificationChannel channel;
+    private String recipientContact;
     private String subject;
     private String message;
     private NotificationStatus status;

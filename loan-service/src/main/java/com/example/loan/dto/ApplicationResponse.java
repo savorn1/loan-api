@@ -15,6 +15,7 @@ public class ApplicationResponse {
     private Long id;
     private Long customerId;
     private String customerName;
+    private Long branchId;
     private BigDecimal requestedAmount;
     private Integer requestedTermMonths;
     private String purpose;

@@ -1,5 +1,6 @@
 package com.example.auth.service.impl;
 
+import com.example.auth.client.BranchClient;
 import com.example.auth.dto.AuthResponse;
 import com.example.auth.dto.ChangePasswordRequest;
 import com.example.auth.dto.JwtUserClaims;
@@ -18,6 +19,7 @@ import com.example.auth.repository.SysUserRepository;
 import com.example.auth.service.AuthService;
 import com.example.auth.service.JwtService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -31,6 +33,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AuthServiceImpl implements AuthService {
 
     private final SysUserRepository userRepository;
@@ -38,6 +41,7 @@ public class AuthServiceImpl implements AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final UserSessionStore userSessionStore;
+    private final BranchClient branchClient;
 
     @Value("${jwt.refresh-expiration}")
     private long refreshExpiration;
@@ -57,7 +61,8 @@ public class AuthServiceImpl implements AuthService {
         userRepository.save(user);
         saveSession(user);
 
-        String token = jwtService.generateToken(user.getUsername(), user.getRole().name(), user.getUuid().toString());
+        String token = jwtService.generateToken(user.getUsername(), user.getRole().name(), user.getUuid().toString(),
+                user.getBranchId());
         String refreshToken = issueRefreshToken(user);
         return buildAuthResponse(token, refreshToken, user);
     }
@@ -78,7 +83,8 @@ public class AuthServiceImpl implements AuthService {
 
         saveSession(user);
 
-        String token = jwtService.generateToken(user.getUsername(), user.getRole().name(), user.getUuid().toString());
+        String token = jwtService.generateToken(user.getUsername(), user.getRole().name(), user.getUuid().toString(),
+                user.getBranchId());
         String refreshToken = issueRefreshToken(user);
         return buildAuthResponse(token, refreshToken, user);
     }
@@ -107,7 +113,8 @@ public class AuthServiceImpl implements AuthService {
         // Re-save the cached session too: permissions may have changed since the last login.
         saveSession(user);
 
-        String token = jwtService.generateToken(user.getUsername(), user.getRole().name(), user.getUuid().toString());
+        String token = jwtService.generateToken(user.getUsername(), user.getRole().name(), user.getUuid().toString(),
+                user.getBranchId());
         String newRefreshToken = issueRefreshToken(user);
         return buildAuthResponse(token, newRefreshToken, user);
     }
@@ -164,7 +171,23 @@ public class AuthServiceImpl implements AuthService {
                 .uuid(user.getUuid().toString())
                 .role(user.getRole().name())
                 .permissions(permissions)
+                .branchId(user.getBranchId())
+                .branchName(resolveBranchName(user.getBranchId()))
                 .build());
+    }
+
+    // Best-effort — soft-fails to null rather than blocking login/session-refresh if
+    // branch-service is unreachable or the referenced branch was since deleted.
+    private String resolveBranchName(Long branchId) {
+        if (branchId == null) {
+            return null;
+        }
+        try {
+            return branchClient.getById(branchId).getData().getName();
+        } catch (Exception e) {
+            log.warn("Could not resolve branch name for branchId={}: {}", branchId, e.getMessage());
+            return null;
+        }
     }
 
     private String issueRefreshToken(SysUser user) {
@@ -185,6 +208,8 @@ public class AuthServiceImpl implements AuthService {
                 .expiresIn(jwtService.getExpiration() / 1000)
                 .username(user.getUsername())
                 .role(user.getRole().name())
+                .branchId(user.getBranchId())
+                .branchName(resolveBranchName(user.getBranchId()))
                 .build();
     }
 }

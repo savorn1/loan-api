@@ -4,6 +4,7 @@ import com.example.auth.dto.ApiResponse;
 import com.example.auth.dto.AssignUserRoleRequest;
 import com.example.auth.dto.CreateUserRequest;
 import com.example.auth.dto.PageResponse;
+import com.example.auth.dto.UpdateBranchRequest;
 import com.example.auth.dto.UpdateRoleRequest;
 import com.example.auth.dto.UpdateStatusRequest;
 import com.example.auth.dto.UserFilterRequest;
@@ -82,6 +83,13 @@ public class UserController {
                                                                     Authentication authentication) {
         return ResponseEntity.ok(ApiResponse.success("Status updated",
                 userService.updateStatus(id, request, requireUsername(authentication))));
+    }
+
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('USER_UPDATE')")
+    @PutMapping("/{id}/branch")
+    public ResponseEntity<ApiResponse<UserResponse>> updateBranch(@PathVariable Long id,
+                                                                    @Valid @RequestBody UpdateBranchRequest request) {
+        return ResponseEntity.ok(ApiResponse.success("Branch updated", userService.updateBranch(id, request)));
     }
 
     @PreAuthorize("hasRole('ADMIN') or hasAuthority('USER_DELETE')")

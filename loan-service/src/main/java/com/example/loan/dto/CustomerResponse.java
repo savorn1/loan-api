@@ -14,4 +14,5 @@ public class CustomerResponse {
     private String phone;
     private String nationalId;
     private LocalDate dateOfBirth;
+    private Long branchId;
 }

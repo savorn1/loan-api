@@ -14,4 +14,6 @@ public interface SysUserRepository extends JpaRepository<SysUser, Long>, JpaSpec
     boolean existsByUsername(String username);
 
     List<SysUser> findByRoles_Id(Long roleId);
+
+    long countByBranch_Id(Long branchId);
 }

@@ -5,3 +5,4 @@ CREATE DATABASE payment_db;
 CREATE DATABASE loan_product_db;
 CREATE DATABASE accounting_db;
 CREATE DATABASE notification_db;
+CREATE DATABASE branch_db;

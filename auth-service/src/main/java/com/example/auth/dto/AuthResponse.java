@@ -17,4 +17,6 @@ public class AuthResponse {
     private long expiresIn;
     private String username;
     private String role;
+    private Long branchId;
+    private String branchName;
 }

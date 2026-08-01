@@ -28,6 +28,10 @@ public class Application extends BaseEntity {
     @Column(nullable = false)
     private Long customerId;
 
+    // Copied from the customer's branchId at creation (see ApplicationServiceImpl.create)
+    // — raw cross-service id, no FK, same unvalidated convention as customerId.
+    private Long branchId;
+
     @Column(name = "requested_amount", nullable = false, precision = 15, scale = 2)
     private BigDecimal requestedAmount;
 

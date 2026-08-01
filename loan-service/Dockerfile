@@ -11,6 +11,7 @@ COPY payment-service/pom.xml   payment-service/
 COPY loan-product-service/pom.xml loan-product-service/
 COPY accounting-service/pom.xml   accounting-service/
 COPY notification-service/pom.xml notification-service/
+COPY branch-service/pom.xml       branch-service/
 
 RUN mvn dependency:go-offline -pl loan-service -am -q || true
 

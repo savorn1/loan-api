@@ -15,6 +15,7 @@ public class LoanResponse {
     private Long id;
     private Long customerId;
     private String customerName;
+    private Long branchId;
     private BigDecimal principal;
     private BigDecimal interestRate;
     private Integer termMonths;

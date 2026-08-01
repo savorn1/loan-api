@@ -58,6 +58,7 @@ public class ApplicationServiceImpl implements ApplicationService {
 
         Application application = Application.builder()
                 .customerId(request.getCustomerId())
+                .branchId(customer != null ? customer.getBranchId() : null)
                 .requestedAmount(request.getRequestedAmount())
                 .requestedTermMonths(request.getRequestedTermMonths())
                 .purpose(request.getPurpose())
@@ -217,6 +218,7 @@ public class ApplicationServiceImpl implements ApplicationService {
         if (request.getDecision() == ApprovalDecision.APPROVED) {
             Loan loan = Loan.builder()
                     .customerId(application.getCustomerId())
+                    .branchId(application.getBranchId())
                     .principal(request.getApprovedAmount())
                     .interestRate(request.getApprovedInterestRate())
                     .termMonths(request.getApprovedTermMonths())
@@ -307,6 +309,7 @@ public class ApplicationServiceImpl implements ApplicationService {
         return ApplicationResponse.builder()
                 .id(application.getId())
                 .customerId(application.getCustomerId())
+                .branchId(application.getBranchId())
                 .customerName(customer != null ? customer.getFirstName() + " " + customer.getLastName() : null)
                 .requestedAmount(application.getRequestedAmount())
                 .requestedTermMonths(application.getRequestedTermMonths())

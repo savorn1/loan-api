@@ -27,6 +27,7 @@
         <module>loan-product-service</module>
         <module>accounting-service</module>
         <module>notification-service</module>
+        <module>branch-service</module>
     </modules>
 
     <properties>

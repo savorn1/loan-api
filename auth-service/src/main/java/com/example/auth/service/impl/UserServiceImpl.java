@@ -1,7 +1,9 @@
 package com.example.auth.service.impl;
 
+import com.example.auth.client.BranchClient;
 import com.example.auth.dto.CreateUserRequest;
 import com.example.auth.dto.PageResponse;
+import com.example.auth.dto.UpdateBranchRequest;
 import com.example.auth.dto.UpdateRoleRequest;
 import com.example.auth.dto.UpdateStatusRequest;
 import com.example.auth.dto.UserFilterRequest;
@@ -14,6 +16,7 @@ import com.example.auth.repository.RefreshTokenRepository;
 import com.example.auth.repository.SysUserRepository;
 import com.example.auth.service.UserService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -29,12 +32,14 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class UserServiceImpl implements UserService {
 
     private final SysUserRepository userRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final UserSessionStore userSessionStore;
+    private final BranchClient branchClient;
 
     @Override
     @Transactional(readOnly = true)
@@ -81,11 +86,15 @@ public class UserServiceImpl implements UserService {
         if (userRepository.existsByUsername(request.getUsername())) {
             throw new AppException(HttpStatus.CONFLICT, "Username already taken: " + request.getUsername());
         }
+        if (request.getBranchId() != null) {
+            validateBranchExists(request.getBranchId());
+        }
         SysUser user = SysUser.builder()
                 .username(request.getUsername())
                 .password(passwordEncoder.encode(request.getPassword()))
                 .role(request.getRole())
                 .status(request.getStatus())
+                .branchId(request.getBranchId())
                 .build();
         userRepository.save(user);
         return toResponse(user);
@@ -119,6 +128,22 @@ public class UserServiceImpl implements UserService {
             refreshTokenRepository.revokeAllForUser(user.getId());
             userSessionStore.delete(user.getUuid().toString());
         }
+        return toResponse(user);
+    }
+
+    @Override
+    @Transactional
+    public UserResponse updateBranch(Long id, UpdateBranchRequest request) {
+        if (request.getBranchId() != null) {
+            validateBranchExists(request.getBranchId());
+        }
+        SysUser user = findUser(id);
+        user.setBranchId(request.getBranchId());
+        userRepository.save(user);
+        // The JWT carries branchId as a claim, same as role — force re-login so a
+        // stale token doesn't keep reporting the user's old branch.
+        refreshTokenRepository.revokeAllForUser(user.getId());
+        userSessionStore.delete(user.getUuid().toString());
         return toResponse(user);
     }
 
@@ -179,6 +204,33 @@ public class UserServiceImpl implements UserService {
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "User not found with id: " + id));
     }
 
+    // Explicit assignment (create/updateBranch) should reject an id that doesn't exist —
+    // unlike the read-side enrichment below, a bad assignment is a real user error worth
+    // surfacing immediately rather than silently accepting an orphaned id.
+    private void validateBranchExists(Long branchId) {
+        try {
+            branchClient.getById(branchId);
+        } catch (Exception e) {
+            throw new AppException(HttpStatus.NOT_FOUND, "Branch not found with id: " + branchId);
+        }
+    }
+
+    // Best-effort display-name lookup — called per row when listing users (same N+1
+    // Feign-call-per-row pattern loan-service already uses for customerName). Soft-fails
+    // to null rather than breaking the whole list if branch-service is down or the
+    // referenced branch was since deleted.
+    private String resolveBranchName(Long branchId) {
+        if (branchId == null) {
+            return null;
+        }
+        try {
+            return branchClient.getById(branchId).getData().getName();
+        } catch (Exception e) {
+            log.warn("Could not resolve branch name for branchId={}: {}", branchId, e.getMessage());
+            return null;
+        }
+    }
+
     private UserResponse toResponse(SysUser user) {
         return UserResponse.builder()
                 .id(user.getId())
@@ -186,6 +238,8 @@ public class UserServiceImpl implements UserService {
                 .username(user.getUsername())
                 .role(user.getRole().name())
                 .status(user.getStatus().name())
+                .branchId(user.getBranchId())
+                .branchName(resolveBranchName(user.getBranchId()))
                 .createdAt(user.getCreatedAt())
                 .updatedAt(user.getUpdatedAt())
                 .build();

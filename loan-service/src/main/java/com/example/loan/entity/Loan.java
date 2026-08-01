@@ -23,6 +23,11 @@ public class Loan extends BaseEntity {
     @Column(nullable = false)
     private Long customerId;
 
+    // Copied from the customer's branchId at creation (see LoanServiceImpl.create /
+    // ApplicationServiceImpl.addApproval) — raw cross-service id, no FK, same
+    // unvalidated convention as customerId.
+    private Long branchId;
+
     @Column(nullable = false, precision = 15, scale = 2)
     private BigDecimal principal;
 

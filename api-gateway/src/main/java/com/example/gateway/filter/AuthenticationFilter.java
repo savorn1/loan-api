@@ -48,6 +48,7 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
                     .request(r -> r.headers(headers -> {
                         headers.remove("X-User-Name");
                         headers.remove("X-User-Role");
+                        headers.remove("X-Branch-Id");
                     }))
                     .build();
             return chain.filter(sanitized);
@@ -74,10 +75,16 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
             // win over the value verified here from the JWT — a privilege-escalation hole in the
             // "trust the perimeter" model every downstream service relies on. set(...) overwrites
             // any inbound value instead of appending to it, closing that gap.
+            Long branchId = claims.get("branchId", Long.class);
             ServerWebExchange mutated = exchange.mutate()
                     .request(r -> r.headers(headers -> {
                         headers.set("X-User-Name", claims.getSubject());
                         headers.set("X-User-Role", claims.get("role", String.class));
+                        if (branchId != null) {
+                            headers.set("X-Branch-Id", String.valueOf(branchId));
+                        } else {
+                            headers.remove("X-Branch-Id");
+                        }
                     }))
                     .build();
             return chain.filter(mutated);

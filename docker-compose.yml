@@ -174,6 +174,23 @@ services:
     networks:
       - loan-net
 
+  branch-service:
+    build:
+      context: .
+      dockerfile: branch-service/Dockerfile
+    container_name: branch-service
+    ports:
+      - "8088:8088"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://host.docker.internal:5432/branch_db
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD:
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-server:8761/eureka/
+    depends_on:
+      - discovery-server
+    networks:
+      - loan-net
+
   # ── Mail catcher (dev/test only — no real provider/creds needed) ───────────
 
   mailhog:

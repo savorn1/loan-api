@@ -18,6 +18,8 @@ public class UserResponse {
     private String username;
     private String role;
     private String status;
+    private Long branchId;
+    private String branchName;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

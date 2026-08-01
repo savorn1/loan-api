@@ -40,6 +40,7 @@ public class RbacSeeder implements CommandLineRunner {
         RESOURCES.put("PAYMENT", "payments");
         RESOURCES.put("LOAN_PRODUCT", "loan products");
         RESOURCES.put("ACCOUNTING", "accounting records");
+        RESOURCES.put("BRANCH", "branches");
     }
 
     private static final Map<String, String> ACTIONS = new LinkedHashMap<>();

@@ -131,6 +131,7 @@ public class LoanServiceImpl implements LoanService {
 
         Loan loan = Loan.builder()
                 .customerId(request.getCustomerId())
+                .branchId(customer != null ? customer.getBranchId() : null)
                 .principal(request.getPrincipal())
                 .interestRate(request.getInterestRate())
                 .termMonths(request.getTermMonths())
@@ -933,6 +934,7 @@ public class LoanServiceImpl implements LoanService {
         return LoanResponse.builder()
                 .id(loan.getId())
                 .customerId(loan.getCustomerId())
+                .branchId(loan.getBranchId())
                 .customerName(customer != null
                         ? customer.getFirstName() + " " + customer.getLastName()
                         : null)

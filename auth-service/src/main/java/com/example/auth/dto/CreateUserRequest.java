@@ -22,4 +22,6 @@ public class CreateUserRequest {
 
     @NotNull
     private UserStatus status = UserStatus.ACTIVE;
+
+    private Long branchId;
 }

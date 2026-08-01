@@ -22,4 +22,6 @@ public class JwtUserClaims {
     private String uuid;
     private String role;
     private List<String> permissions;
+    private Long branchId;
+    private String branchName;
 }

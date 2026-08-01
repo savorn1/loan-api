@@ -56,6 +56,11 @@ public class SysUser extends BaseEntity implements org.springframework.security.
     @Builder.Default
     private Set<RbacRole> roles = new HashSet<>();
 
+    // Raw FK to branch-service's Branch — same unvalidated-cross-service-id convention
+    // as everywhere else in the platform (customerId, loanProductId, etc). Resolved via
+    // BranchClient (Feign) in UserServiceImpl when a display name is needed.
+    private Long branchId;
+
     @Override
     public Collection<? extends org.springframework.security.core.GrantedAuthority> getAuthorities() {
         return List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_" + role.name()));

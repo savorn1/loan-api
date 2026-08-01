@@ -2,6 +2,7 @@ package com.example.auth.service;
 
 import com.example.auth.dto.CreateUserRequest;
 import com.example.auth.dto.PageResponse;
+import com.example.auth.dto.UpdateBranchRequest;
 import com.example.auth.dto.UpdateRoleRequest;
 import com.example.auth.dto.UpdateStatusRequest;
 import com.example.auth.dto.UserFilterRequest;
@@ -20,6 +21,8 @@ public interface UserService {
     UserResponse updateRole(Long id, UpdateRoleRequest request, String actingUsername);
 
     UserResponse updateStatus(Long id, UpdateStatusRequest request, String actingUsername);
+
+    UserResponse updateBranch(Long id, UpdateBranchRequest request);
 
     void deleteUser(Long id, String actingUsername);
 

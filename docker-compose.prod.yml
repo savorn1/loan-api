@@ -189,6 +189,25 @@ services:
     networks:
       - loan-net
 
+  branch-service:
+    build:
+      context: .
+      dockerfile: branch-service/Dockerfile
+    container_name: branch-service
+    restart: unless-stopped
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/branch_db
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-server:8761/eureka/
+    depends_on:
+      postgres:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+    networks:
+      - loan-net
+
   # ── Reverse proxy / TLS (only service exposed to the internet) ─────────────
 
   caddy:

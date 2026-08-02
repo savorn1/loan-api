@@ -5,6 +5,7 @@ import com.example.loan.client.PaymentClient;
 import com.example.loan.common.PageResponse;
 import com.example.loan.dto.ApplyPaymentRequest;
 import com.example.loan.dto.CustomerResponse;
+import com.example.loan.dto.DisbursementReasonRequest;
 import com.example.loan.dto.GenerateScheduleRequest;
 import com.example.loan.dto.LoanAdjustmentRequest;
 import com.example.loan.dto.LoanAdjustmentResponse;
@@ -38,6 +39,7 @@ import com.example.loan.dto.LoanWriteoffResponse;
 import com.example.loan.dto.ScheduleInstallmentRequest;
 import com.example.loan.entity.AdjustmentType;
 import com.example.loan.entity.CollateralStatus;
+import com.example.loan.entity.DisbursementStatus;
 import com.example.loan.entity.FeeStatus;
 import com.example.loan.entity.GuarantorStatus;
 import com.example.loan.entity.Loan;
@@ -289,16 +291,17 @@ public class LoanServiceImpl implements LoanService {
     @Override
     public LoanDisbursementResponse addDisbursement(Long id, LoanDisbursementRequest request) {
         Loan loan = findOrThrow(id);
+        assertWithinPrincipal(loan, request.getAmount(), null);
         LoanDisbursement disbursement = LoanDisbursement.builder()
                 .loan(loan)
                 .amount(request.getAmount())
                 .disbursedDate(request.getDisbursedDate())
                 .method(request.getMethod())
                 .reference(request.getReference())
+                .status(DisbursementStatus.PENDING_APPROVAL)
+                .createdBy(currentUsername())
                 .build();
         LoanDisbursement saved = loanDisbursementRepository.save(disbursement);
-        recordTransaction(loan, TransactionType.DISBURSEMENT, saved.getAmount(), saved.getDisbursedDate(),
-                "LoanDisbursement", saved.getId(), saved.getReference());
         return toDisbursementResponse(saved);
     }
 
@@ -308,6 +311,107 @@ public class LoanServiceImpl implements LoanService {
         return loanDisbursementRepository.findByLoanIdOrderByDisbursedDateAsc(id).stream()
                 .map(this::toDisbursementResponse)
                 .toList();
+    }
+
+    @Override
+    public LoanDisbursementResponse updateDisbursement(Long id, Long disbursementId, LoanDisbursementRequest request) {
+        LoanDisbursement disbursement = findDisbursementOrThrow(id, disbursementId);
+        if (disbursement.getStatus() != DisbursementStatus.PENDING_APPROVAL) {
+            throw new AppException(HttpStatus.CONFLICT, "Only PENDING_APPROVAL disbursements can be edited");
+        }
+        assertWithinPrincipal(disbursement.getLoan(), request.getAmount(), disbursementId);
+        disbursement.setAmount(request.getAmount());
+        disbursement.setDisbursedDate(request.getDisbursedDate());
+        disbursement.setMethod(request.getMethod());
+        disbursement.setReference(request.getReference());
+        return toDisbursementResponse(loanDisbursementRepository.save(disbursement));
+    }
+
+    @Override
+    public void deleteDisbursement(Long id, Long disbursementId) {
+        LoanDisbursement disbursement = findDisbursementOrThrow(id, disbursementId);
+        if (disbursement.getStatus() != DisbursementStatus.PENDING_APPROVAL) {
+            throw new AppException(HttpStatus.CONFLICT, "Only PENDING_APPROVAL disbursements can be deleted");
+        }
+        loanDisbursementRepository.delete(disbursement);
+    }
+
+    @Override
+    public LoanDisbursementResponse approveDisbursement(Long id, Long disbursementId) {
+        LoanDisbursement disbursement = findDisbursementOrThrow(id, disbursementId);
+        if (disbursement.getStatus() != DisbursementStatus.PENDING_APPROVAL) {
+            throw new AppException(HttpStatus.CONFLICT, "Only PENDING_APPROVAL disbursements can be approved");
+        }
+        assertDifferentFromCreator(disbursement, "approve");
+        assertWithinPrincipal(disbursement.getLoan(), disbursement.getAmount(), disbursementId);
+
+        disbursement.setStatus(DisbursementStatus.APPROVED);
+        disbursement.setReviewedBy(currentUsername());
+        disbursement.setReviewedAt(LocalDateTime.now());
+        LoanDisbursement saved = loanDisbursementRepository.save(disbursement);
+
+        recordTransaction(saved.getLoan(), TransactionType.DISBURSEMENT, saved.getAmount(), saved.getDisbursedDate(),
+                "LoanDisbursement", saved.getId(), saved.getReference());
+        return toDisbursementResponse(saved);
+    }
+
+    @Override
+    public LoanDisbursementResponse rejectDisbursement(Long id, Long disbursementId, DisbursementReasonRequest request) {
+        LoanDisbursement disbursement = findDisbursementOrThrow(id, disbursementId);
+        if (disbursement.getStatus() != DisbursementStatus.PENDING_APPROVAL) {
+            throw new AppException(HttpStatus.CONFLICT, "Only PENDING_APPROVAL disbursements can be rejected");
+        }
+        assertDifferentFromCreator(disbursement, "reject");
+
+        disbursement.setStatus(DisbursementStatus.REJECTED);
+        disbursement.setReviewedBy(currentUsername());
+        disbursement.setReviewedAt(LocalDateTime.now());
+        disbursement.setRejectionReason(request.getReason());
+        return toDisbursementResponse(loanDisbursementRepository.save(disbursement));
+    }
+
+    @Override
+    public LoanDisbursementResponse voidDisbursement(Long id, Long disbursementId, DisbursementReasonRequest request) {
+        LoanDisbursement disbursement = findDisbursementOrThrow(id, disbursementId);
+        if (disbursement.getStatus() != DisbursementStatus.APPROVED) {
+            throw new AppException(HttpStatus.CONFLICT, "Only APPROVED disbursements can be voided");
+        }
+
+        disbursement.setStatus(DisbursementStatus.VOIDED);
+        disbursement.setVoidedBy(currentUsername());
+        disbursement.setVoidedAt(LocalDateTime.now());
+        disbursement.setVoidReason(request.getReason());
+        LoanDisbursement saved = loanDisbursementRepository.save(disbursement);
+
+        recordTransaction(saved.getLoan(), TransactionType.ADJUSTMENT, saved.getAmount().negate(), LocalDate.now(),
+                "LoanDisbursement", saved.getId(), "Void: " + request.getReason());
+        return toDisbursementResponse(saved);
+    }
+
+    private LoanDisbursement findDisbursementOrThrow(Long loanId, Long disbursementId) {
+        LoanDisbursement disbursement = loanDisbursementRepository.findById(disbursementId)
+                .orElseThrow(() -> new ResourceNotFoundException("Loan disbursement", disbursementId));
+        if (!disbursement.getLoan().getId().equals(loanId)) {
+            throw new ResourceNotFoundException("Loan disbursement", disbursementId);
+        }
+        return disbursement;
+    }
+
+    private void assertDifferentFromCreator(LoanDisbursement disbursement, String action) {
+        if (currentUsername().equals(disbursement.getCreatedBy())) {
+            throw new AppException(HttpStatus.CONFLICT, "Cannot " + action + " a disbursement you created");
+        }
+    }
+
+    private void assertWithinPrincipal(Loan loan, BigDecimal amount, Long excludingDisbursementId) {
+        BigDecimal committed = loanDisbursementRepository.findByLoanIdOrderByDisbursedDateAsc(loan.getId()).stream()
+                .filter(d -> !d.getId().equals(excludingDisbursementId))
+                .filter(d -> d.getStatus() == DisbursementStatus.PENDING_APPROVAL || d.getStatus() == DisbursementStatus.APPROVED)
+                .map(LoanDisbursement::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (committed.add(amount).compareTo(loan.getPrincipal()) > 0) {
+            throw new AppException(HttpStatus.CONFLICT, "Disbursement exceeds loan principal");
+        }
     }
 
     @Override
@@ -483,6 +587,15 @@ public class LoanServiceImpl implements LoanService {
     }
 
     @Override
+    public PageResponse<LoanInterestResponse> getAllInterestAccruals(int page, int size, String sortBy, String sortOrder) {
+        Sort sort = "asc".equalsIgnoreCase(sortOrder)
+                ? Sort.by(sortBy).ascending()
+                : Sort.by(sortBy).descending();
+        Pageable pageable = PageRequest.of(Math.max(page - 1, 0), size, sort);
+        return PageResponse.of(loanInterestAccrualRepository.findAll(pageable).map(this::toInterestResponse));
+    }
+
+    @Override
     public LoanPenaltyResponse addPenalty(Long id, LoanPenaltyRequest request) {
         Loan loan = findOrThrow(id);
         LoanPenalty penalty = LoanPenalty.builder()
@@ -527,6 +640,15 @@ public class LoanServiceImpl implements LoanService {
         penalty.setStatus(PenaltyStatus.WAIVED);
         penalty.setWaivedAt(LocalDateTime.now());
         return toPenaltyResponse(loanPenaltyRepository.save(penalty));
+    }
+
+    @Override
+    public PageResponse<LoanPenaltyResponse> getAllPenalties(int page, int size, String sortBy, String sortOrder) {
+        Sort sort = "asc".equalsIgnoreCase(sortOrder)
+                ? Sort.by(sortBy).ascending()
+                : Sort.by(sortBy).descending();
+        Pageable pageable = PageRequest.of(Math.max(page - 1, 0), size, sort);
+        return PageResponse.of(loanPenaltyRepository.findAll(pageable).map(this::toPenaltyResponse));
     }
 
     @Override
@@ -1112,6 +1234,14 @@ public class LoanServiceImpl implements LoanService {
                 .disbursedDate(disbursement.getDisbursedDate())
                 .method(disbursement.getMethod())
                 .reference(disbursement.getReference())
+                .status(disbursement.getStatus())
+                .createdBy(disbursement.getCreatedBy())
+                .reviewedBy(disbursement.getReviewedBy())
+                .reviewedAt(disbursement.getReviewedAt())
+                .rejectionReason(disbursement.getRejectionReason())
+                .voidedBy(disbursement.getVoidedBy())
+                .voidedAt(disbursement.getVoidedAt())
+                .voidReason(disbursement.getVoidReason())
                 .createdAt(disbursement.getCreatedAt())
                 .updatedAt(disbursement.getUpdatedAt())
                 .build();

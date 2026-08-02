@@ -3,6 +3,7 @@ package com.example.loan.controller;
 import com.example.loan.common.ApiResponse;
 import com.example.loan.common.PageResponse;
 import com.example.loan.dto.ApplyPaymentRequest;
+import com.example.loan.dto.DisbursementReasonRequest;
 import com.example.loan.dto.LoanAdjustmentRequest;
 import com.example.loan.dto.LoanAdjustmentResponse;
 import com.example.loan.dto.LoanCollateralRequest;
@@ -122,6 +123,49 @@ public class LoanController {
                 .body(ApiResponse.success("Disbursement recorded", loanService.addDisbursement(id, request)));
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
+    @PutMapping("/{id}/disbursements/{disbursementId}")
+    public ResponseEntity<ApiResponse<LoanDisbursementResponse>> updateDisbursement(
+            @PathVariable Long id, @PathVariable Long disbursementId,
+            @Valid @RequestBody LoanDisbursementRequest request) {
+        return ResponseEntity.ok(
+                ApiResponse.success("Disbursement updated", loanService.updateDisbursement(id, disbursementId, request)));
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @DeleteMapping("/{id}/disbursements/{disbursementId}")
+    public ResponseEntity<ApiResponse<Void>> deleteDisbursement(
+            @PathVariable Long id, @PathVariable Long disbursementId) {
+        loanService.deleteDisbursement(id, disbursementId);
+        return ResponseEntity.ok(ApiResponse.success("Disbursement deleted", null));
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @PutMapping("/{id}/disbursements/{disbursementId}/approve")
+    public ResponseEntity<ApiResponse<LoanDisbursementResponse>> approveDisbursement(
+            @PathVariable Long id, @PathVariable Long disbursementId) {
+        return ResponseEntity.ok(
+                ApiResponse.success("Disbursement approved", loanService.approveDisbursement(id, disbursementId)));
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @PutMapping("/{id}/disbursements/{disbursementId}/reject")
+    public ResponseEntity<ApiResponse<LoanDisbursementResponse>> rejectDisbursement(
+            @PathVariable Long id, @PathVariable Long disbursementId,
+            @Valid @RequestBody DisbursementReasonRequest request) {
+        return ResponseEntity.ok(
+                ApiResponse.success("Disbursement rejected", loanService.rejectDisbursement(id, disbursementId, request)));
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @PutMapping("/{id}/disbursements/{disbursementId}/void")
+    public ResponseEntity<ApiResponse<LoanDisbursementResponse>> voidDisbursement(
+            @PathVariable Long id, @PathVariable Long disbursementId,
+            @Valid @RequestBody DisbursementReasonRequest request) {
+        return ResponseEntity.ok(
+                ApiResponse.success("Disbursement voided", loanService.voidDisbursement(id, disbursementId, request)));
+    }
+
     @GetMapping("/{id}/guarantors")
     public ResponseEntity<ApiResponse<List<LoanGuarantorResponse>>> getGuarantors(@PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.success(loanService.getGuarantors(id)));
@@ -199,6 +243,15 @@ public class LoanController {
                 .body(ApiResponse.success("Interest accrual recorded", loanService.addInterestAccrual(id, request)));
     }
 
+    @GetMapping("/interest")
+    public ResponseEntity<PageResponse<LoanInterestResponse>> getAllInterestAccruals(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "createdAt") String sortBy,
+            @RequestParam(defaultValue = "desc") String sortOrder) {
+        return ResponseEntity.ok(loanService.getAllInterestAccruals(page, size, sortBy, sortOrder));
+    }
+
     @GetMapping("/{id}/penalties")
     public ResponseEntity<ApiResponse<List<LoanPenaltyResponse>>> getPenalties(@PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.success(loanService.getPenalties(id)));
@@ -224,6 +277,15 @@ public class LoanController {
     public ResponseEntity<ApiResponse<LoanPenaltyResponse>> waivePenalty(
             @PathVariable Long id, @PathVariable Long penaltyId) {
         return ResponseEntity.ok(ApiResponse.success("Penalty waived", loanService.waivePenalty(id, penaltyId)));
+    }
+
+    @GetMapping("/penalties")
+    public ResponseEntity<PageResponse<LoanPenaltyResponse>> getAllPenalties(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "createdAt") String sortBy,
+            @RequestParam(defaultValue = "desc") String sortOrder) {
+        return ResponseEntity.ok(loanService.getAllPenalties(page, size, sortBy, sortOrder));
     }
 
     @GetMapping("/{id}/fees")

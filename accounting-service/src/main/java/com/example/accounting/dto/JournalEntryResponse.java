@@ -17,6 +17,7 @@ public class JournalEntryResponse {
     private String entryNo;
     private TransactionType transactionType;
     private LocalDate transactionDate;
+    private Long branchId;
     private Long financialPeriodId;
     private String financialPeriodName;
     private String referenceType;

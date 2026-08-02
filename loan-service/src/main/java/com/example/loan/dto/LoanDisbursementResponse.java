@@ -1,6 +1,7 @@
 package com.example.loan.dto;
 
 import com.example.loan.entity.DisbursementMethod;
+import com.example.loan.entity.DisbursementStatus;
 import lombok.Builder;
 import lombok.Data;
 
@@ -18,6 +19,14 @@ public class LoanDisbursementResponse {
     private LocalDate disbursedDate;
     private DisbursementMethod method;
     private String reference;
+    private DisbursementStatus status;
+    private String createdBy;
+    private String reviewedBy;
+    private LocalDateTime reviewedAt;
+    private String rejectionReason;
+    private String voidedBy;
+    private LocalDateTime voidedAt;
+    private String voidReason;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

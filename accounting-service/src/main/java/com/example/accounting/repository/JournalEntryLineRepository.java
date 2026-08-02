@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDate;
 import java.util.List;
 
 public interface JournalEntryLineRepository extends JpaRepository<JournalEntryLine, Long> {
@@ -25,4 +26,32 @@ public interface JournalEntryLineRepository extends JpaRepository<JournalEntryLi
             "and l.journalEntry.status = com.example.accounting.entity.JournalEntryStatus.POSTED " +
             "group by l.glAccount.id, l.entrySide")
     List<AccountSideTotal> aggregateByAccountAndSideForPeriod(@Param("periodId") Long periodId);
+
+    @Query("select l from JournalEntryLine l " +
+            "where l.glAccount.id = :glAccountId " +
+            "and l.journalEntry.status = com.example.accounting.entity.JournalEntryStatus.POSTED " +
+            "and (:dateFrom is null or l.journalEntry.transactionDate >= :dateFrom) " +
+            "and (:dateTo is null or l.journalEntry.transactionDate <= :dateTo) " +
+            "order by l.journalEntry.transactionDate asc, l.lineNo asc")
+    List<JournalEntryLine> findPostedLinesForAccountAndDateRange(@Param("glAccountId") Long glAccountId,
+                                                                    @Param("dateFrom") LocalDate dateFrom,
+                                                                    @Param("dateTo") LocalDate dateTo);
+
+    @Query("select l from JournalEntryLine l " +
+            "where l.glAccount.id = :glAccountId " +
+            "and l.journalEntry.status = com.example.accounting.entity.JournalEntryStatus.POSTED " +
+            "and l.journalEntry.transactionDate < :beforeDate " +
+            "order by l.journalEntry.transactionDate asc, l.lineNo asc")
+    List<JournalEntryLine> findPostedLinesForAccountBeforeDate(@Param("glAccountId") Long glAccountId,
+                                                                  @Param("beforeDate") LocalDate beforeDate);
+
+    @Query("select l from JournalEntryLine l " +
+            "where l.journalEntry.branchId = :branchId " +
+            "and l.journalEntry.status = com.example.accounting.entity.JournalEntryStatus.POSTED " +
+            "and (:dateFrom is null or l.journalEntry.transactionDate >= :dateFrom) " +
+            "and (:dateTo is null or l.journalEntry.transactionDate <= :dateTo) " +
+            "order by l.journalEntry.transactionDate asc, l.lineNo asc")
+    List<JournalEntryLine> findPostedLinesForBranchAndDateRange(@Param("branchId") Long branchId,
+                                                                   @Param("dateFrom") LocalDate dateFrom,
+                                                                   @Param("dateTo") LocalDate dateTo);
 }

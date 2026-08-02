@@ -29,6 +29,11 @@ public class JournalEntry extends BaseEntity {
     @Column(name = "transaction_date", nullable = false)
     private LocalDate transactionDate;
 
+    // Raw branch id, opaque to this service — same convention as loan-service's Loan.branchId;
+    // branch-service is the sole owner of the entity and frontend resolves the name for display.
+    @Column(name = "branch_id")
+    private Long branchId;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "financial_period_id", nullable = false)
     private FinancialPeriod financialPeriod;

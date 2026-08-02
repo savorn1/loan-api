@@ -4,6 +4,7 @@ import com.example.loan.common.PageResponse;
 import com.example.loan.dto.ApplyPaymentRequest;
 import com.example.loan.dto.LoanAdjustmentRequest;
 import com.example.loan.dto.LoanAdjustmentResponse;
+import com.example.loan.dto.DisbursementReasonRequest;
 import com.example.loan.dto.LoanCollateralRequest;
 import com.example.loan.dto.LoanCollateralResponse;
 import com.example.loan.dto.LoanDisbursementRequest;
@@ -59,6 +60,16 @@ public interface LoanService {
 
     List<LoanDisbursementResponse> getDisbursements(Long id);
 
+    LoanDisbursementResponse updateDisbursement(Long id, Long disbursementId, LoanDisbursementRequest request);
+
+    void deleteDisbursement(Long id, Long disbursementId);
+
+    LoanDisbursementResponse approveDisbursement(Long id, Long disbursementId);
+
+    LoanDisbursementResponse rejectDisbursement(Long id, Long disbursementId, DisbursementReasonRequest request);
+
+    LoanDisbursementResponse voidDisbursement(Long id, Long disbursementId, DisbursementReasonRequest request);
+
     LoanGuarantorResponse addGuarantor(Long id, LoanGuarantorRequest request);
 
     List<LoanGuarantorResponse> getGuarantors(Long id);
@@ -83,6 +94,8 @@ public interface LoanService {
 
     List<LoanInterestResponse> getInterestAccruals(Long id);
 
+    PageResponse<LoanInterestResponse> getAllInterestAccruals(int page, int size, String sortBy, String sortOrder);
+
     LoanPenaltyResponse addPenalty(Long id, LoanPenaltyRequest request);
 
     List<LoanPenaltyResponse> getPenalties(Long id);
@@ -90,6 +103,8 @@ public interface LoanService {
     LoanPenaltyResponse payPenalty(Long id, Long penaltyId);
 
     LoanPenaltyResponse waivePenalty(Long id, Long penaltyId);
+
+    PageResponse<LoanPenaltyResponse> getAllPenalties(int page, int size, String sortBy, String sortOrder);
 
     LoanFeeResponse addFee(Long id, LoanFeeRequest request);
 

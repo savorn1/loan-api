@@ -1,14 +1,26 @@
 package com.example.loan.entity;
 
-import jakarta.persistence.*;
-import lombok.*;
-
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
-// A loan may be released in stages — each tranche is logged here. Distinct
-// from Loan.disburse(), which flips the loan APPROVED -> ACTIVE and generates
-// the repayment schedule in one shot; this is just the funds-released ledger.
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
 @Entity
 @Table(name = "loan_disbursements")
 @Getter
@@ -37,4 +49,30 @@ public class LoanDisbursement extends BaseEntity {
     private DisbursementMethod method;
 
     private String reference;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    @Builder.Default
+    private DisbursementStatus status = DisbursementStatus.PENDING_APPROVAL;
+
+    @Column(name = "created_by")
+    private String createdBy;
+
+    @Column(name = "reviewed_by")
+    private String reviewedBy;
+
+    @Column(name = "reviewed_at")
+    private LocalDateTime reviewedAt;
+
+    @Column(name = "rejection_reason")
+    private String rejectionReason;
+
+    @Column(name = "voided_by")
+    private String voidedBy;
+
+    @Column(name = "voided_at")
+    private LocalDateTime voidedAt;
+
+    @Column(name = "void_reason")
+    private String voidReason;
 }

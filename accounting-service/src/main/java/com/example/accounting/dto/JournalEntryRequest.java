@@ -19,6 +19,9 @@ public class JournalEntryRequest {
     @NotNull
     private LocalDate transactionDate;
 
+    @NotNull
+    private Long branchId;
+
     // Reference back to the upstream domain event (e.g. a loan-service disbursement id) —
     // opaque to this service, used only for traceability.
     @Size(max = 50)

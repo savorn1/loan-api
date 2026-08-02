@@ -1,11 +1,22 @@
 package com.example.loan.entity;
 
-import jakarta.persistence.*;
-import lombok.*;
-
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @Entity
 @Table(name = "loans")
@@ -23,9 +34,6 @@ public class Loan extends BaseEntity {
     @Column(nullable = false)
     private Long customerId;
 
-    // Copied from the customer's branchId at creation (see LoanServiceImpl.create /
-    // ApplicationServiceImpl.addApproval) — raw cross-service id, no FK, same
-    // unvalidated convention as customerId.
     private Long branchId;
 
     @Column(nullable = false, precision = 15, scale = 2)

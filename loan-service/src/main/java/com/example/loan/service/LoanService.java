@@ -19,6 +19,8 @@ import com.example.loan.dto.LoanPaymentRequest;
 import com.example.loan.dto.LoanPaymentResponse;
 import com.example.loan.dto.LoanPenaltyRequest;
 import com.example.loan.dto.LoanPenaltyResponse;
+import com.example.loan.dto.LoanRefinanceRequest;
+import com.example.loan.dto.LoanRefinanceResponse;
 import com.example.loan.dto.LoanRequest;
 import com.example.loan.dto.LoanResponse;
 import com.example.loan.dto.LoanRestructureRequest;
@@ -118,6 +120,14 @@ public interface LoanService {
 
     List<LoanRestructureResponse> getRestructures(Long id);
 
+    PageResponse<LoanRestructureResponse> getAllRestructures(int page, int size, String sortBy, String sortOrder);
+
+    LoanRefinanceResponse addRefinance(Long id, LoanRefinanceRequest request);
+
+    List<LoanRefinanceResponse> getRefinances(Long id);
+
+    PageResponse<LoanRefinanceResponse> getAllRefinances(int page, int size, String sortBy, String sortOrder);
+
     LoanSettlementResponse addSettlement(Long id, LoanSettlementRequest request);
 
     LoanSettlementResponse getSettlement(Long id);
@@ -129,6 +139,8 @@ public interface LoanService {
     LoanWriteoffResponse getWriteoff(Long id);
 
     LoanWriteoffResponse completeWriteoff(Long id);
+
+    PageResponse<LoanWriteoffResponse> getAllWriteoffs(int page, int size, String sortBy, String sortOrder);
 
     LoanAdjustmentResponse addAdjustment(Long id, LoanAdjustmentRequest request);
 

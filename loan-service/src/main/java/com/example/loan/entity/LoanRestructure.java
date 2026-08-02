@@ -1,17 +1,23 @@
 package com.example.loan.entity;
 
-import jakarta.persistence.*;
-import lombok.*;
-
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
-// An in-place term/rate change on an ACTIVE loan — not a PENDING/APPROVED
-// workflow of its own. Applying one re-amortizes the loan's *outstanding*
-// balance (not its original principal) over the new term/rate as of
-// effectiveDate: LoanServiceImpl.addRestructure() updates the loan's
-// termMonths/interestRate/maturityDate/monthlyInstallment and regenerates
-// its LoanSchedule in the same transaction as saving this history row.
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
 @Entity
 @Table(name = "loan_restructures")
 @Getter

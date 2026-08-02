@@ -1,15 +1,24 @@
 package com.example.loan.entity;
 
-import jakarta.persistence.*;
-import lombok.*;
-
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-// An audit trail of every decision recorded against an application — appended to, never
-// edited. approvedAmount/approvedInterestRate/approvedTermMonths are only populated when
-// decision is APPROVED (underwriting can approve a different amount/rate/term than requested);
-// ApplicationServiceImpl uses them to create the actual Loan.
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 @Entity
 @Table(name = "loan_application_approvals")
 @Getter

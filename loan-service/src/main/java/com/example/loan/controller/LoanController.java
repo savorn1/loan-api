@@ -20,6 +20,8 @@ import com.example.loan.dto.LoanPaymentRequest;
 import com.example.loan.dto.LoanPaymentResponse;
 import com.example.loan.dto.LoanPenaltyRequest;
 import com.example.loan.dto.LoanPenaltyResponse;
+import com.example.loan.dto.LoanRefinanceRequest;
+import com.example.loan.dto.LoanRefinanceResponse;
 import com.example.loan.dto.LoanRequest;
 import com.example.loan.dto.LoanResponse;
 import com.example.loan.dto.LoanRestructureRequest;
@@ -328,6 +330,37 @@ public class LoanController {
                 .body(ApiResponse.success("Loan restructured", loanService.addRestructure(id, request)));
     }
 
+    @GetMapping("/restructures")
+    public ResponseEntity<PageResponse<LoanRestructureResponse>> getAllRestructures(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "createdAt") String sortBy,
+            @RequestParam(defaultValue = "desc") String sortOrder) {
+        return ResponseEntity.ok(loanService.getAllRestructures(page, size, sortBy, sortOrder));
+    }
+
+    @GetMapping("/{id}/refinances")
+    public ResponseEntity<ApiResponse<List<LoanRefinanceResponse>>> getRefinances(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.success(loanService.getRefinances(id)));
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @PostMapping("/{id}/refinances")
+    public ResponseEntity<ApiResponse<LoanRefinanceResponse>> addRefinance(
+            @PathVariable Long id, @Valid @RequestBody LoanRefinanceRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Refinance recorded", loanService.addRefinance(id, request)));
+    }
+
+    @GetMapping("/refinances")
+    public ResponseEntity<PageResponse<LoanRefinanceResponse>> getAllRefinances(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "createdAt") String sortBy,
+            @RequestParam(defaultValue = "desc") String sortOrder) {
+        return ResponseEntity.ok(loanService.getAllRefinances(page, size, sortBy, sortOrder));
+    }
+
     @GetMapping("/{id}/settlement")
     public ResponseEntity<ApiResponse<LoanSettlementResponse>> getSettlement(@PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.success(loanService.getSettlement(id)));
@@ -364,6 +397,15 @@ public class LoanController {
     @PutMapping("/{id}/writeoff/complete")
     public ResponseEntity<ApiResponse<LoanWriteoffResponse>> completeWriteoff(@PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.success("Write-off completed", loanService.completeWriteoff(id)));
+    }
+
+    @GetMapping("/writeoffs")
+    public ResponseEntity<PageResponse<LoanWriteoffResponse>> getAllWriteoffs(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "createdAt") String sortBy,
+            @RequestParam(defaultValue = "desc") String sortOrder) {
+        return ResponseEntity.ok(loanService.getAllWriteoffs(page, size, sortBy, sortOrder));
     }
 
     @GetMapping("/{id}/adjustments")

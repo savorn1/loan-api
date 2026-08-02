@@ -1,18 +1,25 @@
 package com.example.loan.entity;
 
-import jakarta.persistence.*;
-import lombok.*;
-
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
-// The unified money-movement ledger for a loan — read-only, appended by
-// LoanServiceImpl.recordTransaction() alongside every action that actually
-// moves money (disbursement, payment allocation, penalty/fee payment,
-// adjustment, write-off, settlement). referenceType/referenceId trace each
-// row back to the record that caused it; balanceAfter is the loan's
-// outstandingBalance immediately after this event, so the ledger can be
-// read as a running balance without recomputing anything.
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
 @Entity
 @Table(name = "loan_transactions")
 @Getter

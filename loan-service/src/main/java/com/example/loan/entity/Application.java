@@ -1,17 +1,22 @@
 package com.example.loan.entity;
 
-import jakarta.persistence.*;
-import lombok.*;
-
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-// The pre-approval workflow record (loan_applications) — deliberately a separate table from
-// Loan (loans), not a status on it. A customer submits an Application; once an
-// ApplicationApproval with decision APPROVED is recorded (see ApplicationServiceImpl), this
-// service creates the actual Loan (already APPROVED, ready for the existing disburse() flow)
-// and links it back here via loanId. Named "Application" rather than "LoanApplication" to
-// avoid colliding with com.example.loan.LoanApplication, this module's Spring Boot bootstrap class.
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
 @Entity
 @Table(name = "loan_applications")
 @Getter

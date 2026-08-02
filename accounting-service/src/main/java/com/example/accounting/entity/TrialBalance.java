@@ -1,19 +1,23 @@
 package com.example.accounting.entity;
 
-import jakarta.persistence.*;
-import lombok.*;
-
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
-// A generated, immutable snapshot of the trial balance report for one financial period —
-// distinct from TrialBalanceService's live computed report (GET /trial-balance), which
-// re-aggregates journal_entry_lines on every call and reflects whatever is posted *right now*.
-// A snapshot instead freezes the numbers at the moment it was generated (see
-// TrialBalanceSnapshotServiceImpl.generate(), sourced from general_ledger balances) so it stays
-// stable for audit purposes even if more entries post afterward. Multiple snapshots can exist
-// for the same period.
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.Table;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
 @Entity
 @Table(name = "trial_balances")
 @Getter

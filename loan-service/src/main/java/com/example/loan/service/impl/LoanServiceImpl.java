@@ -24,6 +24,8 @@ import com.example.loan.dto.LoanPaymentRequest;
 import com.example.loan.dto.LoanPaymentResponse;
 import com.example.loan.dto.LoanPenaltyRequest;
 import com.example.loan.dto.LoanPenaltyResponse;
+import com.example.loan.dto.LoanRefinanceRequest;
+import com.example.loan.dto.LoanRefinanceResponse;
 import com.example.loan.dto.LoanRequest;
 import com.example.loan.dto.LoanResponse;
 import com.example.loan.dto.LoanRestructureRequest;
@@ -52,6 +54,7 @@ import com.example.loan.entity.LoanInterestAccrual;
 import com.example.loan.entity.LoanPayment;
 import com.example.loan.entity.LoanPaymentDetail;
 import com.example.loan.entity.LoanPenalty;
+import com.example.loan.entity.LoanRefinance;
 import com.example.loan.entity.LoanRestructure;
 import com.example.loan.entity.LoanSchedule;
 import com.example.loan.entity.LoanScheduleInstallment;
@@ -77,6 +80,7 @@ import com.example.loan.repository.LoanInterestAccrualRepository;
 import com.example.loan.repository.LoanPaymentDetailRepository;
 import com.example.loan.repository.LoanPaymentRepository;
 import com.example.loan.repository.LoanPenaltyRepository;
+import com.example.loan.repository.LoanRefinanceRepository;
 import com.example.loan.repository.LoanRepository;
 import com.example.loan.repository.LoanRestructureRepository;
 import com.example.loan.repository.LoanScheduleInstallmentRepository;
@@ -122,6 +126,7 @@ public class LoanServiceImpl implements LoanService {
     private final LoanPenaltyRepository loanPenaltyRepository;
     private final LoanFeeRepository loanFeeRepository;
     private final LoanRestructureRepository loanRestructureRepository;
+    private final LoanRefinanceRepository loanRefinanceRepository;
     private final LoanSettlementRepository loanSettlementRepository;
     private final LoanWriteoffRepository loanWriteoffRepository;
     private final LoanAdjustmentRepository loanAdjustmentRepository;
@@ -742,6 +747,49 @@ public class LoanServiceImpl implements LoanService {
     }
 
     @Override
+    public PageResponse<LoanRestructureResponse> getAllRestructures(int page, int size, String sortBy, String sortOrder) {
+        Sort sort = "asc".equalsIgnoreCase(sortOrder)
+                ? Sort.by(sortBy).ascending()
+                : Sort.by(sortBy).descending();
+        Pageable pageable = PageRequest.of(Math.max(page - 1, 0), size, sort);
+        return PageResponse.of(loanRestructureRepository.findAll(pageable).map(this::toRestructureResponse));
+    }
+
+    @Override
+    public LoanRefinanceResponse addRefinance(Long id, LoanRefinanceRequest request) {
+        Loan loan = findOrThrow(id);
+        if (loan.getStatus() != LoanStatus.ACTIVE) {
+            throw new AppException(HttpStatus.CONFLICT, "Only ACTIVE loans can be refinanced");
+        }
+        findOrThrow(request.getNewLoanId());
+
+        LoanRefinance refinance = LoanRefinance.builder()
+                .loan(loan)
+                .newLoanId(request.getNewLoanId())
+                .reason(request.getReason())
+                .effectiveDate(request.getEffectiveDate())
+                .build();
+        return toRefinanceResponse(loanRefinanceRepository.save(refinance));
+    }
+
+    @Override
+    public List<LoanRefinanceResponse> getRefinances(Long id) {
+        findOrThrow(id);
+        return loanRefinanceRepository.findByLoanIdOrderByEffectiveDateAsc(id).stream()
+                .map(this::toRefinanceResponse)
+                .toList();
+    }
+
+    @Override
+    public PageResponse<LoanRefinanceResponse> getAllRefinances(int page, int size, String sortBy, String sortOrder) {
+        Sort sort = "asc".equalsIgnoreCase(sortOrder)
+                ? Sort.by(sortBy).ascending()
+                : Sort.by(sortBy).descending();
+        Pageable pageable = PageRequest.of(Math.max(page - 1, 0), size, sort);
+        return PageResponse.of(loanRefinanceRepository.findAll(pageable).map(this::toRefinanceResponse));
+    }
+
+    @Override
     public LoanSettlementResponse addSettlement(Long id, LoanSettlementRequest request) {
         Loan loan = findOrThrow(id);
         if (loan.getStatus() != LoanStatus.ACTIVE) {
@@ -841,6 +889,15 @@ public class LoanServiceImpl implements LoanService {
                 savedWriteoff.getWriteoffDate(), "LoanWriteoff", savedWriteoff.getId(), savedWriteoff.getReason());
 
         return toWriteoffResponse(savedWriteoff);
+    }
+
+    @Override
+    public PageResponse<LoanWriteoffResponse> getAllWriteoffs(int page, int size, String sortBy, String sortOrder) {
+        Sort sort = "asc".equalsIgnoreCase(sortOrder)
+                ? Sort.by(sortBy).ascending()
+                : Sort.by(sortBy).descending();
+        Pageable pageable = PageRequest.of(Math.max(page - 1, 0), size, sort);
+        return PageResponse.of(loanWriteoffRepository.findAll(pageable).map(this::toWriteoffResponse));
     }
 
     // Shared by settlement/write-off completion: zeroes the balance and
@@ -1168,6 +1225,18 @@ public class LoanServiceImpl implements LoanService {
                 .effectiveDate(restructure.getEffectiveDate())
                 .createdAt(restructure.getCreatedAt())
                 .updatedAt(restructure.getUpdatedAt())
+                .build();
+    }
+
+    private LoanRefinanceResponse toRefinanceResponse(LoanRefinance refinance) {
+        return LoanRefinanceResponse.builder()
+                .id(refinance.getId())
+                .loanId(refinance.getLoan().getId())
+                .newLoanId(refinance.getNewLoanId())
+                .reason(refinance.getReason())
+                .effectiveDate(refinance.getEffectiveDate())
+                .createdAt(refinance.getCreatedAt())
+                .updatedAt(refinance.getUpdatedAt())
                 .build();
     }
 

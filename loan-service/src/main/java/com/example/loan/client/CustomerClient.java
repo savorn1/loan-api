@@ -1,10 +1,13 @@
 package com.example.loan.client;
 
 import com.example.loan.common.ApiResponse;
+import com.example.loan.dto.CustomerIdentityResponse;
 import com.example.loan.dto.CustomerResponse;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+
+import java.util.List;
 
 @FeignClient(name = "customer-service")
 public interface CustomerClient {
@@ -14,4 +17,9 @@ public interface CustomerClient {
     // deserializes into `data` instead of silently leaving every field null.
     @GetMapping("/api/customers/{id}")
     ApiResponse<CustomerResponse> getById(@PathVariable Long id);
+
+    // Used by GroupServiceImpl to derive GroupMemberResponse.kycStatus (VERIFIED
+    // if the customer has >=1 ACTIVE identity on file).
+    @GetMapping("/api/customers/{id}/identities")
+    ApiResponse<List<CustomerIdentityResponse>> getIdentities(@PathVariable Long id);
 }

@@ -29,6 +29,16 @@ spring:
               predicates:
                 - Path=/api/loans/**
 
+            - id: loan-service-groups
+              uri: lb://loan-service
+              predicates:
+                - Path=/api/groups/**
+
+            - id: loan-service-group-loan-applications
+              uri: lb://loan-service
+              predicates:
+                - Path=/api/group-loan-applications/**
+
             - id: payment-service
               uri: lb://payment-service
               predicates:

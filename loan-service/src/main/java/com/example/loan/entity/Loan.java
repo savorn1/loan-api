@@ -31,6 +31,14 @@ public class Loan extends BaseEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    // Assigned after the initial save, once the id is known — same two-phase-save
+    // pattern as customer-service's Customer.customerNo. Nullable (unlike
+    // customerNo) because ddl-auto=update can't add a NOT NULL column to a
+    // table that already has rows; existing loans need a backfill before this
+    // can be tightened to nullable=false.
+    @Column(unique = true, updatable = false)
+    private String loanNo;
+
     @Column(nullable = false)
     private Long customerId;
 

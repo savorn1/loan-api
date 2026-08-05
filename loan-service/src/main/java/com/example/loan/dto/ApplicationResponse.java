@@ -13,6 +13,7 @@ import java.util.List;
 public class ApplicationResponse {
 
     private Long id;
+    private String applicationNo;
     private Long customerId;
     private String customerName;
     private Long branchId;

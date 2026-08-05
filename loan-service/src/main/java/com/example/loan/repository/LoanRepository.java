@@ -6,13 +6,14 @@ import com.example.loan.dto.PortfolioSummaryResponse;
 import com.example.loan.entity.Loan;
 import com.example.loan.entity.LoanStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
-public interface LoanRepository extends JpaRepository<Loan, Long> {
+public interface LoanRepository extends JpaRepository<Loan, Long>, JpaSpecificationExecutor<Loan> {
 
     List<Loan> findByCustomerId(Long customerId);
 

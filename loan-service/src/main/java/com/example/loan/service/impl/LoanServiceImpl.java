@@ -91,10 +91,12 @@ import com.example.loan.repository.LoanTransactionRepository;
 import com.example.loan.repository.LoanWriteoffRepository;
 import com.example.loan.service.LoanService;
 import com.example.loan.util.AmortizationCalculator;
+import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -104,6 +106,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -146,6 +149,8 @@ public class LoanServiceImpl implements LoanService {
                 .build();
 
         Loan saved = loanRepository.save(loan);
+        saved.setLoanNo(generateLoanNo(saved));
+        saved = loanRepository.save(saved);
         recordStatusHistory(saved, null, LoanStatus.PENDING, null);
         return toResponse(saved, customer);
     }
@@ -158,12 +163,37 @@ public class LoanServiceImpl implements LoanService {
     }
 
     @Override
-    public PageResponse<LoanResponse> getAll(int page, int size, String sortBy, String sortOrder) {
+    public PageResponse<LoanResponse> getAll(int page, int size, String sortBy, String sortOrder,
+                                              Long customerId, Long branchId,
+                                              BigDecimal minPrincipal, BigDecimal maxPrincipal,
+                                              LocalDate dateFrom, LocalDate dateTo) {
         Sort sort = "asc".equalsIgnoreCase(sortOrder)
                 ? Sort.by(sortBy).ascending()
                 : Sort.by(sortBy).descending();
         Pageable pageable = PageRequest.of(Math.max(page - 1, 0), size, sort);
-        return PageResponse.of(loanRepository.findAll(pageable)
+        Specification<Loan> spec = (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            if (customerId != null) {
+                predicates.add(cb.equal(root.get("customerId"), customerId));
+            }
+            if (branchId != null) {
+                predicates.add(cb.equal(root.get("branchId"), branchId));
+            }
+            if (minPrincipal != null) {
+                predicates.add(cb.greaterThanOrEqualTo(root.get("principal"), minPrincipal));
+            }
+            if (maxPrincipal != null) {
+                predicates.add(cb.lessThanOrEqualTo(root.get("principal"), maxPrincipal));
+            }
+            if (dateFrom != null) {
+                predicates.add(cb.greaterThanOrEqualTo(root.get("createdAt"), dateFrom.atStartOfDay()));
+            }
+            if (dateTo != null) {
+                predicates.add(cb.lessThan(root.get("createdAt"), dateTo.plusDays(1).atStartOfDay()));
+            }
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
+        return PageResponse.of(loanRepository.findAll(spec, pageable)
                 .map(loan -> toResponse(loan, customerClient.getById(loan.getCustomerId()).getData())));
     }
 
@@ -307,6 +337,8 @@ public class LoanServiceImpl implements LoanService {
                 .createdBy(currentUsername())
                 .build();
         LoanDisbursement saved = loanDisbursementRepository.save(disbursement);
+        saved.setDisbursementNo(generateDisbursementNo(saved));
+        saved = loanDisbursementRepository.save(saved);
         return toDisbursementResponse(saved);
     }
 
@@ -517,6 +549,8 @@ public class LoanServiceImpl implements LoanService {
                 .reference(request.getReference())
                 .build();
         LoanPayment savedPayment = loanPaymentRepository.save(payment);
+        savedPayment.setPaymentNo(generatePaymentNo(savedPayment));
+        savedPayment = loanPaymentRepository.save(savedPayment);
 
         List<LoanPaymentDetail> details = allocatePayment(loan, savedPayment, request.getAmount());
 
@@ -1080,6 +1114,7 @@ public class LoanServiceImpl implements LoanService {
                 .toList();
         return LoanPaymentResponse.builder()
                 .id(payment.getId())
+                .paymentNo(payment.getPaymentNo())
                 .loanId(payment.getLoan().getId())
                 .amount(payment.getAmount())
                 .paymentDate(payment.getPaymentDate())
@@ -1109,9 +1144,25 @@ public class LoanServiceImpl implements LoanService {
                 .orElseThrow(() -> new ResourceNotFoundException("Loan", id));
     }
 
+    private String generateLoanNo(Loan loan) {
+        String datePart = loan.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+        return "LN-" + datePart + "-" + String.format("%06d", loan.getId());
+    }
+
+    private String generatePaymentNo(LoanPayment payment) {
+        String datePart = payment.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+        return "PMT-" + datePart + "-" + String.format("%06d", payment.getId());
+    }
+
+    private String generateDisbursementNo(LoanDisbursement disbursement) {
+        String datePart = disbursement.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+        return "DSB-" + datePart + "-" + String.format("%06d", disbursement.getId());
+    }
+
     private LoanResponse toResponse(Loan loan, CustomerResponse customer) {
         return LoanResponse.builder()
                 .id(loan.getId())
+                .loanNo(loan.getLoanNo())
                 .customerId(loan.getCustomerId())
                 .branchId(loan.getBranchId())
                 .customerName(customer != null
@@ -1298,6 +1349,7 @@ public class LoanServiceImpl implements LoanService {
     private LoanDisbursementResponse toDisbursementResponse(LoanDisbursement disbursement) {
         return LoanDisbursementResponse.builder()
                 .id(disbursement.getId())
+                .disbursementNo(disbursement.getDisbursementNo())
                 .loanId(disbursement.getLoan().getId())
                 .amount(disbursement.getAmount())
                 .disbursedDate(disbursement.getDisbursedDate())

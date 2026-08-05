@@ -30,6 +30,12 @@ public class Application extends BaseEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    // Assigned after the initial save, once the id is known — same two-phase-save
+    // pattern as Loan.loanNo. Nullable because ddl-auto=update can't add a NOT
+    // NULL column to a table that already has rows.
+    @Column(unique = true, updatable = false)
+    private String applicationNo;
+
     @Column(nullable = false)
     private Long customerId;
 

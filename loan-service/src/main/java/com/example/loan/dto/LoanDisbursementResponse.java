@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
 public class LoanDisbursementResponse {
 
     private Long id;
+    private String disbursementNo;
     private Long loanId;
     private BigDecimal amount;
     private LocalDate disbursedDate;

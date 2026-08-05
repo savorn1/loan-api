@@ -39,6 +39,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 @Service
@@ -66,7 +67,11 @@ public class ApplicationServiceImpl implements ApplicationService {
                 .submittedAt(LocalDateTime.now())
                 .build();
 
-        return toResponse(applicationRepository.save(application), customer);
+        application = applicationRepository.save(application);
+        application.setApplicationNo(generateApplicationNo(application));
+        application = applicationRepository.save(application);
+
+        return toResponse(application, customer);
     }
 
     @Override
@@ -242,6 +247,11 @@ public class ApplicationServiceImpl implements ApplicationService {
                 .orElseThrow(() -> new ResourceNotFoundException("Application", id));
     }
 
+    private String generateApplicationNo(Application application) {
+        String datePart = application.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+        return "APP-" + datePart + "-" + String.format("%06d", application.getId());
+    }
+
     private ApplicationDocument findDocumentOrThrow(Long applicationId, Long documentId) {
         ApplicationDocument document = applicationDocumentRepository.findById(documentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Application document", documentId));
@@ -308,6 +318,7 @@ public class ApplicationServiceImpl implements ApplicationService {
 
         return ApplicationResponse.builder()
                 .id(application.getId())
+                .applicationNo(application.getApplicationNo())
                 .customerId(application.getCustomerId())
                 .branchId(application.getBranchId())
                 .customerName(customer != null ? customer.getFirstName() + " " + customer.getLastName() : null)

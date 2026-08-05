@@ -24,6 +24,14 @@ public class LoanPayment extends BaseEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    // System-generated receipt number, distinct from the free-text `reference`
+    // below (a bank slip/cheque number the teller types in). Assigned after the
+    // initial save, once the id is known — same two-phase-save pattern as
+    // Loan.loanNo. Nullable because ddl-auto=update can't add a NOT NULL column
+    // to a table that already has rows.
+    @Column(unique = true, updatable = false)
+    private String paymentNo;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "loan_id", nullable = false)
     private Loan loan;

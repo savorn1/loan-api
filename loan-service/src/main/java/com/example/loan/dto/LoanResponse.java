@@ -13,6 +13,7 @@ import java.time.LocalDateTime;
 public class LoanResponse {
 
     private Long id;
+    private String loanNo;
     private Long customerId;
     private String customerName;
     private Long branchId;

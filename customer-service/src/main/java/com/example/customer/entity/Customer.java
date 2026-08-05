@@ -1,9 +1,20 @@
 package com.example.customer.entity;
 
-import jakarta.persistence.*;
-import lombok.*;
-
 import java.time.LocalDate;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @Entity
 @Table(name = "customers")
@@ -18,24 +29,17 @@ public class Customer extends BaseEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // Assigned after the initial save, once the id is known — see
-    // CustomerServiceImpl.generateCustomerNo() (same two-phase-save pattern as
-    // accounting-service's JournalEntry.entryNo).
-    @Column(nullable = false, unique = true, updatable = false)
+    @Column(unique = true)
     private String customerNo;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private CustomerType customerType;
 
-    // Required for INDIVIDUAL, left null for CORPORATE (which only carries a
-    // fullName — the registered company/legal name).
     private String firstName;
 
     private String lastName;
 
-    // Always populated: derived as "firstName lastName" for INDIVIDUAL,
-    // supplied directly (company name) for CORPORATE.
     @Column(nullable = false)
     private String fullName;
 
@@ -62,9 +66,5 @@ public class Customer extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private CustomerStatus status;
-
-    // Raw FK to a branch — no Branch entity/service exists in this system yet,
-    // so this stays an unvalidated id (same pattern as referenceId/loanProductId
-    // elsewhere in the platform: cross-service ids aren't enforced as JPA joins).
     private Long branchId;
 }

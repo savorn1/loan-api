@@ -57,6 +57,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -103,7 +104,7 @@ public class CustomerServiceImpl implements CustomerService {
                 .build();
 
         customer = customerRepository.save(customer);
-        customer.setCustomerNo(generateCustomerNo(customer.getId()));
+        customer.setCustomerNo(generateCustomerNo(customer));
         customer = customerRepository.save(customer);
 
         return toResponse(customer);
@@ -135,6 +136,14 @@ public class CustomerServiceImpl implements CustomerService {
         }
         if (filter.getBranchId() != null) {
             conditions.add((root, query, cb) -> cb.equal(root.get("branchId"), filter.getBranchId()));
+        }
+        if (filter.getDateFrom() != null) {
+            conditions.add((root, query, cb) ->
+                    cb.greaterThanOrEqualTo(root.get("createdAt"), filter.getDateFrom().atStartOfDay()));
+        }
+        if (filter.getDateTo() != null) {
+            conditions.add((root, query, cb) ->
+                    cb.lessThan(root.get("createdAt"), filter.getDateTo().plusDays(1).atStartOfDay()));
         }
 
         Specification<Customer> spec = Specification.allOf(conditions);
@@ -683,8 +692,9 @@ public class CustomerServiceImpl implements CustomerService {
         return relationship;
     }
 
-    private String generateCustomerNo(Long id) {
-        return "CUS-" + String.format("%06d", id);
+    private String generateCustomerNo(Customer customer) {
+        String datePart = customer.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+        return "CUS-" + datePart + "-" + String.format("%06d", customer.getId());
     }
 
     private CustomerResponse toResponse(Customer customer) {

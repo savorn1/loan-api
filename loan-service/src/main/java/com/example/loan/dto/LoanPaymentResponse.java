@@ -14,6 +14,7 @@ import java.util.List;
 public class LoanPaymentResponse {
 
     private Long id;
+    private String paymentNo;
     private Long loanId;
     private BigDecimal amount;
     private LocalDate paymentDate;

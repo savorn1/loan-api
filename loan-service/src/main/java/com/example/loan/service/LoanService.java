@@ -34,6 +34,8 @@ import com.example.loan.dto.LoanTransactionResponse;
 import com.example.loan.dto.LoanWriteoffRequest;
 import com.example.loan.dto.LoanWriteoffResponse;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 
 public interface LoanService {
@@ -42,7 +44,10 @@ public interface LoanService {
 
     LoanResponse getById(Long id);
 
-    PageResponse<LoanResponse> getAll(int page, int size, String sortBy, String sortOrder);
+    PageResponse<LoanResponse> getAll(int page, int size, String sortBy, String sortOrder,
+                                       Long customerId, Long branchId,
+                                       BigDecimal minPrincipal, BigDecimal maxPrincipal,
+                                       LocalDate dateFrom, LocalDate dateTo);
 
     List<LoanResponse> getByCustomer(Long customerId);
 

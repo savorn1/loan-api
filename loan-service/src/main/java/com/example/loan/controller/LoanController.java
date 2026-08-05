@@ -37,11 +37,14 @@ import com.example.loan.dto.LoanWriteoffResponse;
 import com.example.loan.service.LoanService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 
 @RestController
@@ -67,8 +70,15 @@ public class LoanController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "createdAt") String sortBy,
-            @RequestParam(defaultValue = "desc") String sortOrder) {
-        return ResponseEntity.ok(loanService.getAll(page, size, sortBy, sortOrder));
+            @RequestParam(defaultValue = "desc") String sortOrder,
+            @RequestParam(required = false) Long customerId,
+            @RequestParam(required = false) Long branchId,
+            @RequestParam(required = false) BigDecimal minPrincipal,
+            @RequestParam(required = false) BigDecimal maxPrincipal,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo) {
+        return ResponseEntity.ok(loanService.getAll(page, size, sortBy, sortOrder,
+                customerId, branchId, minPrincipal, maxPrincipal, dateFrom, dateTo));
     }
 
     @GetMapping("/customer/{customerId}")

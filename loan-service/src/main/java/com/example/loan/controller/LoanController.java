@@ -10,6 +10,11 @@ import com.example.loan.dto.LoanCollateralRequest;
 import com.example.loan.dto.LoanCollateralResponse;
 import com.example.loan.dto.LoanDisbursementRequest;
 import com.example.loan.dto.LoanDisbursementResponse;
+import com.example.loan.dto.LoanDocumentRequest;
+import com.example.loan.dto.LoanDocumentResponse;
+import com.example.loan.dto.LoanDocumentStatusUpdateRequest;
+import com.example.loan.dto.LoanNoteRequest;
+import com.example.loan.dto.LoanNoteResponse;
 import com.example.loan.dto.LoanFeeRequest;
 import com.example.loan.dto.LoanFeeResponse;
 import com.example.loan.dto.LoanGuarantorRequest;
@@ -63,6 +68,13 @@ public class LoanController {
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<LoanResponse>> getById(@PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.success(loanService.getById(id)));
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @PutMapping("/{id}")
+    public ResponseEntity<ApiResponse<LoanResponse>> update(
+            @PathVariable Long id, @Valid @RequestBody LoanRequest request) {
+        return ResponseEntity.ok(ApiResponse.success("Loan updated", loanService.update(id, request)));
     }
 
     @GetMapping
@@ -192,6 +204,23 @@ public class LoanController {
     }
 
     @PreAuthorize("hasRole('ADMIN')")
+    @PutMapping("/{id}/guarantors/{guarantorId}")
+    public ResponseEntity<ApiResponse<LoanGuarantorResponse>> updateGuarantor(
+            @PathVariable Long id, @PathVariable Long guarantorId,
+            @Valid @RequestBody LoanGuarantorRequest request) {
+        return ResponseEntity.ok(
+                ApiResponse.success("Guarantor updated", loanService.updateGuarantor(id, guarantorId, request)));
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @DeleteMapping("/{id}/guarantors/{guarantorId}")
+    public ResponseEntity<ApiResponse<Void>> deleteGuarantor(
+            @PathVariable Long id, @PathVariable Long guarantorId) {
+        loanService.deleteGuarantor(id, guarantorId);
+        return ResponseEntity.ok(ApiResponse.success("Guarantor deleted", null));
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
     @PutMapping("/{id}/guarantors/{guarantorId}/release")
     public ResponseEntity<ApiResponse<LoanGuarantorResponse>> releaseGuarantor(
             @PathVariable Long id, @PathVariable Long guarantorId) {
@@ -212,10 +241,68 @@ public class LoanController {
     }
 
     @PreAuthorize("hasRole('ADMIN')")
+    @PutMapping("/{id}/collaterals/{collateralId}")
+    public ResponseEntity<ApiResponse<LoanCollateralResponse>> updateCollateral(
+            @PathVariable Long id, @PathVariable Long collateralId,
+            @Valid @RequestBody LoanCollateralRequest request) {
+        return ResponseEntity.ok(
+                ApiResponse.success("Collateral updated", loanService.updateCollateral(id, collateralId, request)));
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @DeleteMapping("/{id}/collaterals/{collateralId}")
+    public ResponseEntity<ApiResponse<Void>> deleteCollateral(
+            @PathVariable Long id, @PathVariable Long collateralId) {
+        loanService.deleteCollateral(id, collateralId);
+        return ResponseEntity.ok(ApiResponse.success("Collateral deleted", null));
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
     @PutMapping("/{id}/collaterals/{collateralId}/release")
     public ResponseEntity<ApiResponse<LoanCollateralResponse>> releaseCollateral(
             @PathVariable Long id, @PathVariable Long collateralId) {
         return ResponseEntity.ok(ApiResponse.success("Collateral released", loanService.releaseCollateral(id, collateralId)));
+    }
+
+    @GetMapping("/{id}/documents")
+    public ResponseEntity<ApiResponse<List<LoanDocumentResponse>>> getDocuments(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.success(loanService.getDocuments(id)));
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @PostMapping("/{id}/documents")
+    public ResponseEntity<ApiResponse<LoanDocumentResponse>> addDocument(
+            @PathVariable Long id, @Valid @RequestBody LoanDocumentRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Document added", loanService.addDocument(id, request)));
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @PutMapping("/{id}/documents/{documentId}/status")
+    public ResponseEntity<ApiResponse<LoanDocumentResponse>> updateDocumentStatus(
+            @PathVariable Long id, @PathVariable Long documentId,
+            @Valid @RequestBody LoanDocumentStatusUpdateRequest request) {
+        return ResponseEntity.ok(ApiResponse.success("Document status updated", loanService.updateDocumentStatus(id, documentId, request)));
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @DeleteMapping("/{id}/documents/{documentId}")
+    public ResponseEntity<ApiResponse<Void>> deleteDocument(
+            @PathVariable Long id, @PathVariable Long documentId) {
+        loanService.deleteDocument(id, documentId);
+        return ResponseEntity.ok(ApiResponse.success("Document deleted", null));
+    }
+
+    @GetMapping("/{id}/notes")
+    public ResponseEntity<ApiResponse<List<LoanNoteResponse>>> getNotes(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.success(loanService.getNotes(id)));
+    }
+
+    @PostMapping("/{id}/notes")
+    public ResponseEntity<ApiResponse<LoanNoteResponse>> addNote(
+            @PathVariable Long id, @Valid @RequestBody LoanNoteRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Note added", loanService.addNote(id, request)));
     }
 
     @GetMapping("/{id}/schedules")
@@ -255,6 +342,23 @@ public class LoanController {
                 .body(ApiResponse.success("Interest accrual recorded", loanService.addInterestAccrual(id, request)));
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
+    @PutMapping("/{id}/interest/{accrualId}")
+    public ResponseEntity<ApiResponse<LoanInterestResponse>> updateInterestAccrual(
+            @PathVariable Long id, @PathVariable Long accrualId,
+            @Valid @RequestBody LoanInterestRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(
+                "Interest accrual updated", loanService.updateInterestAccrual(id, accrualId, request)));
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @DeleteMapping("/{id}/interest/{accrualId}")
+    public ResponseEntity<ApiResponse<Void>> deleteInterestAccrual(
+            @PathVariable Long id, @PathVariable Long accrualId) {
+        loanService.deleteInterestAccrual(id, accrualId);
+        return ResponseEntity.ok(ApiResponse.success("Interest accrual deleted", null));
+    }
+
     @GetMapping("/interest")
     public ResponseEntity<PageResponse<LoanInterestResponse>> getAllInterestAccruals(
             @RequestParam(defaultValue = "1") int page,
@@ -275,6 +379,23 @@ public class LoanController {
             @PathVariable Long id, @Valid @RequestBody LoanPenaltyRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("Penalty added", loanService.addPenalty(id, request)));
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @PutMapping("/{id}/penalties/{penaltyId}")
+    public ResponseEntity<ApiResponse<LoanPenaltyResponse>> updatePenalty(
+            @PathVariable Long id, @PathVariable Long penaltyId,
+            @Valid @RequestBody LoanPenaltyRequest request) {
+        return ResponseEntity.ok(
+                ApiResponse.success("Penalty updated", loanService.updatePenalty(id, penaltyId, request)));
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @DeleteMapping("/{id}/penalties/{penaltyId}")
+    public ResponseEntity<ApiResponse<Void>> deletePenalty(
+            @PathVariable Long id, @PathVariable Long penaltyId) {
+        loanService.deletePenalty(id, penaltyId);
+        return ResponseEntity.ok(ApiResponse.success("Penalty deleted", null));
     }
 
     @PreAuthorize("hasRole('ADMIN')")
@@ -311,6 +432,20 @@ public class LoanController {
             @PathVariable Long id, @Valid @RequestBody LoanFeeRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("Fee added", loanService.addFee(id, request)));
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @PutMapping("/{id}/fees/{feeId}")
+    public ResponseEntity<ApiResponse<LoanFeeResponse>> updateFee(
+            @PathVariable Long id, @PathVariable Long feeId, @Valid @RequestBody LoanFeeRequest request) {
+        return ResponseEntity.ok(ApiResponse.success("Fee updated", loanService.updateFee(id, feeId, request)));
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @DeleteMapping("/{id}/fees/{feeId}")
+    public ResponseEntity<ApiResponse<Void>> deleteFee(@PathVariable Long id, @PathVariable Long feeId) {
+        loanService.deleteFee(id, feeId);
+        return ResponseEntity.ok(ApiResponse.success("Fee deleted", null));
     }
 
     @PreAuthorize("hasRole('ADMIN')")

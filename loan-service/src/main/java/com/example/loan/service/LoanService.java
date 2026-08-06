@@ -9,6 +9,11 @@ import com.example.loan.dto.LoanCollateralRequest;
 import com.example.loan.dto.LoanCollateralResponse;
 import com.example.loan.dto.LoanDisbursementRequest;
 import com.example.loan.dto.LoanDisbursementResponse;
+import com.example.loan.dto.LoanDocumentRequest;
+import com.example.loan.dto.LoanDocumentResponse;
+import com.example.loan.dto.LoanDocumentStatusUpdateRequest;
+import com.example.loan.dto.LoanNoteRequest;
+import com.example.loan.dto.LoanNoteResponse;
 import com.example.loan.dto.LoanFeeRequest;
 import com.example.loan.dto.LoanFeeResponse;
 import com.example.loan.dto.LoanGuarantorRequest;
@@ -41,6 +46,8 @@ import java.util.List;
 public interface LoanService {
 
     LoanResponse create(LoanRequest request);
+
+    LoanResponse update(Long id, LoanRequest request);
 
     LoanResponse getById(Long id);
 
@@ -81,13 +88,33 @@ public interface LoanService {
 
     List<LoanGuarantorResponse> getGuarantors(Long id);
 
+    LoanGuarantorResponse updateGuarantor(Long id, Long guarantorId, LoanGuarantorRequest request);
+
+    void deleteGuarantor(Long id, Long guarantorId);
+
     LoanGuarantorResponse releaseGuarantor(Long id, Long guarantorId);
 
     LoanCollateralResponse addCollateral(Long id, LoanCollateralRequest request);
 
     List<LoanCollateralResponse> getCollaterals(Long id);
 
+    LoanCollateralResponse updateCollateral(Long id, Long collateralId, LoanCollateralRequest request);
+
+    void deleteCollateral(Long id, Long collateralId);
+
     LoanCollateralResponse releaseCollateral(Long id, Long collateralId);
+
+    LoanDocumentResponse addDocument(Long id, LoanDocumentRequest request);
+
+    List<LoanDocumentResponse> getDocuments(Long id);
+
+    LoanDocumentResponse updateDocumentStatus(Long id, Long documentId, LoanDocumentStatusUpdateRequest request);
+
+    void deleteDocument(Long id, Long documentId);
+
+    LoanNoteResponse addNote(Long id, LoanNoteRequest request);
+
+    List<LoanNoteResponse> getNotes(Long id);
 
     List<LoanScheduleResponse> getSchedules(Long id);
 
@@ -101,11 +128,19 @@ public interface LoanService {
 
     List<LoanInterestResponse> getInterestAccruals(Long id);
 
+    LoanInterestResponse updateInterestAccrual(Long id, Long accrualId, LoanInterestRequest request);
+
+    void deleteInterestAccrual(Long id, Long accrualId);
+
     PageResponse<LoanInterestResponse> getAllInterestAccruals(int page, int size, String sortBy, String sortOrder);
 
     LoanPenaltyResponse addPenalty(Long id, LoanPenaltyRequest request);
 
     List<LoanPenaltyResponse> getPenalties(Long id);
+
+    LoanPenaltyResponse updatePenalty(Long id, Long penaltyId, LoanPenaltyRequest request);
+
+    void deletePenalty(Long id, Long penaltyId);
 
     LoanPenaltyResponse payPenalty(Long id, Long penaltyId);
 
@@ -116,6 +151,10 @@ public interface LoanService {
     LoanFeeResponse addFee(Long id, LoanFeeRequest request);
 
     List<LoanFeeResponse> getFees(Long id);
+
+    LoanFeeResponse updateFee(Long id, Long feeId, LoanFeeRequest request);
+
+    void deleteFee(Long id, Long feeId);
 
     LoanFeeResponse payFee(Long id, Long feeId);
 

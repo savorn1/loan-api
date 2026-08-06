@@ -1,5 +1,5 @@
 .PHONY: help env-check secret mvn-build \
-	dev-build dev-up dev-down dev-restart dev-logs dev-ps dev-swagger \
+	dev-build dev-up dev-down dev-restart dev-logs dev-ps dev-swagger dev-grafana dev-prometheus dev-loki \
 	prod-build prod-up prod-down prod-restart prod-logs prod-ps prod-deploy prod-swagger
 
 COMPOSE_DEV  = docker compose -f docker-compose.yml
@@ -14,6 +14,9 @@ help:
 	@echo "  make dev-logs      - tail logs for all dev services"
 	@echo "  make dev-ps        - show dev container status"
 	@echo "  make dev-swagger   - print the Swagger UI URL for the dev stack"
+	@echo "  make dev-grafana   - print the Grafana URL for the dev stack"
+	@echo "  make dev-prometheus - print the Prometheus URL for the dev stack"
+	@echo "  make dev-loki      - print the Loki API URL for the dev stack (query via Grafana Explore)"
 	@echo ""
 	@echo "  make mvn-build     - compile loan-service and payment-service with Maven (no Docker)"
 	@echo ""
@@ -58,6 +61,15 @@ dev-ps:
 
 dev-swagger:
 	@echo "http://localhost:8090/swagger-ui.html"
+
+dev-grafana:
+	@echo "http://localhost:3000 (admin/admin)"
+
+dev-prometheus:
+	@echo "http://localhost:9090"
+
+dev-loki:
+	@echo "http://localhost:3100"
 
 mvn-build:
 	./mvnw -pl loan-service,payment-service -am clean install

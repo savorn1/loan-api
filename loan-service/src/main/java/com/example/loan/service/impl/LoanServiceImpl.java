@@ -13,6 +13,11 @@ import com.example.loan.dto.LoanCollateralRequest;
 import com.example.loan.dto.LoanCollateralResponse;
 import com.example.loan.dto.LoanDisbursementRequest;
 import com.example.loan.dto.LoanDisbursementResponse;
+import com.example.loan.dto.LoanDocumentRequest;
+import com.example.loan.dto.LoanDocumentResponse;
+import com.example.loan.dto.LoanDocumentStatusUpdateRequest;
+import com.example.loan.dto.LoanNoteRequest;
+import com.example.loan.dto.LoanNoteResponse;
 import com.example.loan.dto.LoanFeeRequest;
 import com.example.loan.dto.LoanFeeResponse;
 import com.example.loan.dto.LoanGuarantorRequest;
@@ -47,6 +52,8 @@ import com.example.loan.entity.GuarantorStatus;
 import com.example.loan.entity.Loan;
 import com.example.loan.entity.LoanAdjustment;
 import com.example.loan.entity.LoanCollateral;
+import com.example.loan.entity.LoanDocument;
+import com.example.loan.entity.LoanNote;
 import com.example.loan.entity.LoanDisbursement;
 import com.example.loan.entity.LoanFee;
 import com.example.loan.entity.LoanGuarantor;
@@ -73,6 +80,8 @@ import com.example.loan.exception.AppException;
 import com.example.loan.exception.ResourceNotFoundException;
 import com.example.loan.repository.LoanAdjustmentRepository;
 import com.example.loan.repository.LoanCollateralRepository;
+import com.example.loan.repository.LoanDocumentRepository;
+import com.example.loan.repository.LoanNoteRepository;
 import com.example.loan.repository.LoanDisbursementRepository;
 import com.example.loan.repository.LoanFeeRepository;
 import com.example.loan.repository.LoanGuarantorRepository;
@@ -121,6 +130,8 @@ public class LoanServiceImpl implements LoanService {
     private final LoanDisbursementRepository loanDisbursementRepository;
     private final LoanGuarantorRepository loanGuarantorRepository;
     private final LoanCollateralRepository loanCollateralRepository;
+    private final LoanDocumentRepository loanDocumentRepository;
+    private final LoanNoteRepository loanNoteRepository;
     private final LoanScheduleRepository loanScheduleRepository;
     private final LoanScheduleInstallmentRepository loanScheduleInstallmentRepository;
     private final LoanPaymentRepository loanPaymentRepository;
@@ -311,8 +322,29 @@ public class LoanServiceImpl implements LoanService {
     }
 
     @Override
+    public LoanResponse update(Long id, LoanRequest request) {
+        Loan loan = findOrThrow(id);
+        if (loan.getStatus() != LoanStatus.PENDING) {
+            throw new AppException(HttpStatus.CONFLICT, "Only PENDING loans can be edited");
+        }
+        CustomerResponse customer = customerClient.getById(request.getCustomerId()).getData();
+        loan.setCustomerId(request.getCustomerId());
+        loan.setBranchId(customer != null ? customer.getBranchId() : null);
+        loan.setPrincipal(request.getPrincipal());
+        loan.setInterestRate(request.getInterestRate());
+        loan.setTermMonths(request.getTermMonths());
+        loan.setPurpose(request.getPurpose());
+        Loan saved = loanRepository.save(loan);
+        return toResponse(saved, customer);
+    }
+
+    @Override
     public void delete(Long id) {
-        loanRepository.delete(findOrThrow(id));
+        Loan loan = findOrThrow(id);
+        if (loan.getStatus() != LoanStatus.PENDING) {
+            throw new AppException(HttpStatus.CONFLICT, "Only PENDING loans can be deleted");
+        }
+        loanRepository.delete(loan);
     }
 
     @Override
@@ -474,6 +506,28 @@ public class LoanServiceImpl implements LoanService {
     }
 
     @Override
+    public LoanGuarantorResponse updateGuarantor(Long id, Long guarantorId, LoanGuarantorRequest request) {
+        LoanGuarantor guarantor = findGuarantorOrThrow(id, guarantorId);
+        if (guarantor.getStatus() != GuarantorStatus.ACTIVE) {
+            throw new AppException(HttpStatus.CONFLICT, "Only ACTIVE guarantors can be edited");
+        }
+        guarantor.setName(request.getName());
+        guarantor.setPhone(request.getPhone());
+        guarantor.setRelationship(request.getRelationship());
+        guarantor.setGuaranteedAmount(request.getGuaranteedAmount());
+        return toGuarantorResponse(loanGuarantorRepository.save(guarantor));
+    }
+
+    @Override
+    public void deleteGuarantor(Long id, Long guarantorId) {
+        LoanGuarantor guarantor = findGuarantorOrThrow(id, guarantorId);
+        if (guarantor.getStatus() != GuarantorStatus.ACTIVE) {
+            throw new AppException(HttpStatus.CONFLICT, "Only ACTIVE guarantors can be deleted");
+        }
+        loanGuarantorRepository.delete(guarantor);
+    }
+
+    @Override
     public LoanGuarantorResponse releaseGuarantor(Long id, Long guarantorId) {
         LoanGuarantor guarantor = findGuarantorOrThrow(id, guarantorId);
         if (guarantor.getStatus() != GuarantorStatus.ACTIVE) {
@@ -507,6 +561,28 @@ public class LoanServiceImpl implements LoanService {
     }
 
     @Override
+    public LoanCollateralResponse updateCollateral(Long id, Long collateralId, LoanCollateralRequest request) {
+        LoanCollateral collateral = findCollateralOrThrow(id, collateralId);
+        if (collateral.getStatus() != CollateralStatus.PLEDGED) {
+            throw new AppException(HttpStatus.CONFLICT, "Only PLEDGED collateral can be edited");
+        }
+        collateral.setType(request.getType());
+        collateral.setDescription(request.getDescription());
+        collateral.setEstimatedValue(request.getEstimatedValue());
+        collateral.setReference(request.getReference());
+        return toCollateralResponse(loanCollateralRepository.save(collateral));
+    }
+
+    @Override
+    public void deleteCollateral(Long id, Long collateralId) {
+        LoanCollateral collateral = findCollateralOrThrow(id, collateralId);
+        if (collateral.getStatus() != CollateralStatus.PLEDGED) {
+            throw new AppException(HttpStatus.CONFLICT, "Only PLEDGED collateral can be deleted");
+        }
+        loanCollateralRepository.delete(collateral);
+    }
+
+    @Override
     public LoanCollateralResponse releaseCollateral(Long id, Long collateralId) {
         LoanCollateral collateral = findCollateralOrThrow(id, collateralId);
         if (collateral.getStatus() != CollateralStatus.PLEDGED) {
@@ -515,6 +591,58 @@ public class LoanServiceImpl implements LoanService {
         collateral.setStatus(CollateralStatus.RELEASED);
         collateral.setReleasedAt(LocalDateTime.now());
         return toCollateralResponse(loanCollateralRepository.save(collateral));
+    }
+
+    @Override
+    public LoanDocumentResponse addDocument(Long id, LoanDocumentRequest request) {
+        Loan loan = findOrThrow(id);
+        LoanDocument document = LoanDocument.builder()
+                .loan(loan)
+                .name(request.getName())
+                .status(request.getStatus())
+                .notes(request.getNotes())
+                .build();
+        return toDocumentResponse(loanDocumentRepository.save(document));
+    }
+
+    @Override
+    public List<LoanDocumentResponse> getDocuments(Long id) {
+        findOrThrow(id);
+        return loanDocumentRepository.findByLoanIdOrderByCreatedAtAsc(id).stream()
+                .map(this::toDocumentResponse)
+                .toList();
+    }
+
+    @Override
+    public LoanDocumentResponse updateDocumentStatus(Long id, Long documentId, LoanDocumentStatusUpdateRequest request) {
+        LoanDocument document = findDocumentOrThrow(id, documentId);
+        document.setStatus(request.getStatus());
+        return toDocumentResponse(loanDocumentRepository.save(document));
+    }
+
+    @Override
+    public void deleteDocument(Long id, Long documentId) {
+        LoanDocument document = findDocumentOrThrow(id, documentId);
+        loanDocumentRepository.delete(document);
+    }
+
+    @Override
+    public LoanNoteResponse addNote(Long id, LoanNoteRequest request) {
+        Loan loan = findOrThrow(id);
+        LoanNote note = LoanNote.builder()
+                .loan(loan)
+                .authorName(currentUsername())
+                .note(request.getNote())
+                .build();
+        return toNoteResponse(loanNoteRepository.save(note));
+    }
+
+    @Override
+    public List<LoanNoteResponse> getNotes(Long id) {
+        findOrThrow(id);
+        return loanNoteRepository.findByLoanIdOrderByCreatedAtAsc(id).stream()
+                .map(this::toNoteResponse)
+                .toList();
     }
 
     @Override
@@ -626,6 +754,22 @@ public class LoanServiceImpl implements LoanService {
     }
 
     @Override
+    public LoanInterestResponse updateInterestAccrual(Long id, Long accrualId, LoanInterestRequest request) {
+        LoanInterestAccrual accrual = findInterestAccrualOrThrow(id, accrualId);
+        accrual.setPeriodStart(request.getPeriodStart());
+        accrual.setPeriodEnd(request.getPeriodEnd());
+        accrual.setRate(request.getRate());
+        accrual.setAmount(request.getAmount());
+        return toInterestResponse(loanInterestAccrualRepository.save(accrual));
+    }
+
+    @Override
+    public void deleteInterestAccrual(Long id, Long accrualId) {
+        LoanInterestAccrual accrual = findInterestAccrualOrThrow(id, accrualId);
+        loanInterestAccrualRepository.delete(accrual);
+    }
+
+    @Override
     public PageResponse<LoanInterestResponse> getAllInterestAccruals(int page, int size, String sortBy, String sortOrder) {
         Sort sort = "asc".equalsIgnoreCase(sortOrder)
                 ? Sort.by(sortBy).ascending()
@@ -653,6 +797,27 @@ public class LoanServiceImpl implements LoanService {
         return loanPenaltyRepository.findByLoanIdOrderByAppliedDateAsc(id).stream()
                 .map(this::toPenaltyResponse)
                 .toList();
+    }
+
+    @Override
+    public LoanPenaltyResponse updatePenalty(Long id, Long penaltyId, LoanPenaltyRequest request) {
+        LoanPenalty penalty = findPenaltyOrThrow(id, penaltyId);
+        if (penalty.getStatus() != PenaltyStatus.PENDING) {
+            throw new AppException(HttpStatus.CONFLICT, "Only PENDING penalties can be edited");
+        }
+        penalty.setAmount(request.getAmount());
+        penalty.setReason(request.getReason());
+        penalty.setAppliedDate(request.getAppliedDate());
+        return toPenaltyResponse(loanPenaltyRepository.save(penalty));
+    }
+
+    @Override
+    public void deletePenalty(Long id, Long penaltyId) {
+        LoanPenalty penalty = findPenaltyOrThrow(id, penaltyId);
+        if (penalty.getStatus() != PenaltyStatus.PENDING) {
+            throw new AppException(HttpStatus.CONFLICT, "Only PENDING penalties can be deleted");
+        }
+        loanPenaltyRepository.delete(penalty);
     }
 
     @Override
@@ -710,6 +875,28 @@ public class LoanServiceImpl implements LoanService {
         return loanFeeRepository.findByLoanIdOrderByChargedDateAsc(id).stream()
                 .map(this::toFeeResponse)
                 .toList();
+    }
+
+    @Override
+    public LoanFeeResponse updateFee(Long id, Long feeId, LoanFeeRequest request) {
+        LoanFee fee = findFeeOrThrow(id, feeId);
+        if (fee.getStatus() != FeeStatus.PENDING) {
+            throw new AppException(HttpStatus.CONFLICT, "Only PENDING fees can be edited");
+        }
+        fee.setType(request.getType());
+        fee.setAmount(request.getAmount());
+        fee.setChargedDate(request.getChargedDate());
+        fee.setDescription(request.getDescription());
+        return toFeeResponse(loanFeeRepository.save(fee));
+    }
+
+    @Override
+    public void deleteFee(Long id, Long feeId) {
+        LoanFee fee = findFeeOrThrow(id, feeId);
+        if (fee.getStatus() != FeeStatus.PENDING) {
+            throw new AppException(HttpStatus.CONFLICT, "Only PENDING fees can be deleted");
+        }
+        loanFeeRepository.delete(fee);
     }
 
     @Override
@@ -1203,6 +1390,15 @@ public class LoanServiceImpl implements LoanService {
         return collateral;
     }
 
+    private LoanDocument findDocumentOrThrow(Long loanId, Long documentId) {
+        LoanDocument document = loanDocumentRepository.findById(documentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Loan document", documentId));
+        if (!document.getLoan().getId().equals(loanId)) {
+            throw new ResourceNotFoundException("Loan document", documentId);
+        }
+        return document;
+    }
+
     private LoanPenalty findPenaltyOrThrow(Long loanId, Long penaltyId) {
         LoanPenalty penalty = loanPenaltyRepository.findById(penaltyId)
                 .orElseThrow(() -> new ResourceNotFoundException("Loan penalty", penaltyId));
@@ -1219,6 +1415,15 @@ public class LoanServiceImpl implements LoanService {
             throw new ResourceNotFoundException("Loan fee", feeId);
         }
         return fee;
+    }
+
+    private LoanInterestAccrual findInterestAccrualOrThrow(Long loanId, Long accrualId) {
+        LoanInterestAccrual accrual = loanInterestAccrualRepository.findById(accrualId)
+                .orElseThrow(() -> new ResourceNotFoundException("Loan interest accrual", accrualId));
+        if (!accrual.getLoan().getId().equals(loanId)) {
+            throw new ResourceNotFoundException("Loan interest accrual", accrualId);
+        }
+        return accrual;
     }
 
     private LoanInterestResponse toInterestResponse(LoanInterestAccrual accrual) {
@@ -1395,6 +1600,28 @@ public class LoanServiceImpl implements LoanService {
                 .releasedAt(collateral.getReleasedAt())
                 .createdAt(collateral.getCreatedAt())
                 .updatedAt(collateral.getUpdatedAt())
+                .build();
+    }
+
+    private LoanDocumentResponse toDocumentResponse(LoanDocument document) {
+        return LoanDocumentResponse.builder()
+                .id(document.getId())
+                .loanId(document.getLoan().getId())
+                .name(document.getName())
+                .status(document.getStatus())
+                .notes(document.getNotes())
+                .createdAt(document.getCreatedAt())
+                .updatedAt(document.getUpdatedAt())
+                .build();
+    }
+
+    private LoanNoteResponse toNoteResponse(LoanNote note) {
+        return LoanNoteResponse.builder()
+                .id(note.getId())
+                .loanId(note.getLoan().getId())
+                .authorName(note.getAuthorName())
+                .note(note.getNote())
+                .createdAt(note.getCreatedAt())
                 .build();
     }
 

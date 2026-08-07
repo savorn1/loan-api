@@ -27,9 +27,11 @@ import com.example.customer.service.CustomerService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -97,6 +99,20 @@ public class CustomerController {
     public ResponseEntity<ApiResponse<Void>> deleteIdentity(@PathVariable Long id, @PathVariable Long identityId) {
         customerService.deleteIdentity(id, identityId);
         return ResponseEntity.ok(ApiResponse.success("Identity deleted", null));
+    }
+
+    @PostMapping(value = "/{id}/identities/{identityId}/scan", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ApiResponse<CustomerIdentityResponse>> uploadIdentityScan(
+            @PathVariable Long id, @PathVariable Long identityId, @RequestParam("file") MultipartFile file) {
+        return ResponseEntity.ok(
+                ApiResponse.success("Scan uploaded", customerService.uploadIdentityScan(id, identityId, file)));
+    }
+
+    @DeleteMapping("/{id}/identities/{identityId}/scan")
+    public ResponseEntity<ApiResponse<CustomerIdentityResponse>> deleteIdentityScan(
+            @PathVariable Long id, @PathVariable Long identityId) {
+        return ResponseEntity.ok(
+                ApiResponse.success("Scan removed", customerService.deleteIdentityScan(id, identityId)));
     }
 
     @GetMapping("/{id}/addresses")

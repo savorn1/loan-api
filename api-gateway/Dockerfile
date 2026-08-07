@@ -12,6 +12,7 @@ COPY loan-product-service/pom.xml loan-product-service/
 COPY accounting-service/pom.xml   accounting-service/
 COPY notification-service/pom.xml notification-service/
 COPY branch-service/pom.xml       branch-service/
+COPY common-storage/pom.xml     common-storage/
 
 RUN mvn dependency:go-offline -pl api-gateway -am -q || true
 

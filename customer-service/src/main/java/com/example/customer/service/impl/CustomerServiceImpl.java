@@ -53,9 +53,12 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import com.example.storage.FileStorageService;
+import com.example.storage.StoredFile;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -67,6 +70,7 @@ public class CustomerServiceImpl implements CustomerService {
 
     private final CustomerRepository customerRepository;
     private final CustomerIdentityRepository customerIdentityRepository;
+    private final FileStorageService fileStorageService;
     private final CustomerAddressRepository customerAddressRepository;
     private final CustomerContactRepository customerContactRepository;
     private final CustomerEmploymentRepository customerEmploymentRepository;
@@ -251,6 +255,25 @@ public class CustomerServiceImpl implements CustomerService {
     public void deleteIdentity(Long customerId, Long identityId) {
         findOrThrow(customerId);
         customerIdentityRepository.delete(findIdentityOrThrow(customerId, identityId));
+    }
+
+    @Override
+    public CustomerIdentityResponse uploadIdentityScan(Long customerId, Long identityId, MultipartFile file) {
+        findOrThrow(customerId);
+        CustomerIdentity identity = findIdentityOrThrow(customerId, identityId);
+        StoredFile stored = fileStorageService.upload(file, "customers/" + customerId + "/identities");
+        identity.setScanFileName(file.getOriginalFilename());
+        identity.setScanFileUrl(stored.url());
+        return toIdentityResponse(customerIdentityRepository.save(identity));
+    }
+
+    @Override
+    public CustomerIdentityResponse deleteIdentityScan(Long customerId, Long identityId) {
+        findOrThrow(customerId);
+        CustomerIdentity identity = findIdentityOrThrow(customerId, identityId);
+        identity.setScanFileName(null);
+        identity.setScanFileUrl(null);
+        return toIdentityResponse(customerIdentityRepository.save(identity));
     }
 
     @Override
@@ -731,6 +754,8 @@ public class CustomerServiceImpl implements CustomerService {
                 .expiryDate(identity.getExpiryDate())
                 .issuingCountry(identity.getIssuingCountry())
                 .status(identity.getStatus())
+                .scanFileName(identity.getScanFileName())
+                .scanFileUrl(identity.getScanFileUrl())
                 .createdAt(identity.getCreatedAt())
                 .updatedAt(identity.getUpdatedAt())
                 .build();

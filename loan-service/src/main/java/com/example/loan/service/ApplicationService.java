@@ -9,6 +9,7 @@ import com.example.loan.dto.ApplicationNoteRequest;
 import com.example.loan.dto.ApplicationNoteResponse;
 import com.example.loan.dto.ApplicationRequest;
 import com.example.loan.dto.ApplicationResponse;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -31,6 +32,8 @@ public interface ApplicationService {
     void delete(Long id);
 
     ApplicationDocumentResponse addDocument(Long id, ApplicationDocumentRequest request);
+
+    ApplicationDocumentResponse uploadDocument(Long id, String documentType, MultipartFile file);
 
     ApplicationDocumentResponse verifyDocument(Long id, Long documentId);
 

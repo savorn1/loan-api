@@ -7,9 +7,11 @@ import com.example.loanproduct.service.DocumentTemplateService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.UUID;
@@ -50,5 +52,20 @@ public class DocumentTemplateController {
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable UUID id) {
         documentTemplateService.delete(id);
         return ResponseEntity.ok(ApiResponse.success("Document template deleted", null));
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @PostMapping(value = "/{id}/sample-file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ApiResponse<DocumentTemplateResponse>> uploadSampleFile(
+            @PathVariable UUID id, @RequestParam("file") MultipartFile file) {
+        return ResponseEntity.ok(
+                ApiResponse.success("Sample file uploaded", documentTemplateService.uploadSampleFile(id, file)));
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @DeleteMapping("/{id}/sample-file")
+    public ResponseEntity<ApiResponse<DocumentTemplateResponse>> deleteSampleFile(@PathVariable UUID id) {
+        return ResponseEntity.ok(
+                ApiResponse.success("Sample file removed", documentTemplateService.deleteSampleFile(id)));
     }
 }

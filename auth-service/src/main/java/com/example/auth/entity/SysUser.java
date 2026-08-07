@@ -61,6 +61,15 @@ public class SysUser extends BaseEntity implements org.springframework.security.
     // BranchClient (Feign) in UserServiceImpl when a display name is needed.
     private Long branchId;
 
+    // Self-service profile fields — set via /api/auth/me, not at registration.
+    private String email;
+
+    @Column(name = "avatar_file_name", length = 255)
+    private String avatarFileName;
+
+    @Column(name = "avatar_url", length = 500)
+    private String avatarUrl;
+
     @Override
     public Collection<? extends org.springframework.security.core.GrantedAuthority> getAuthorities() {
         return List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_" + role.name()));

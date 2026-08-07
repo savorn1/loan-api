@@ -6,8 +6,11 @@ import com.example.loanproduct.entity.DocumentTemplate;
 import com.example.loanproduct.exception.ResourceNotFoundException;
 import com.example.loanproduct.repository.DocumentTemplateRepository;
 import com.example.loanproduct.service.DocumentTemplateService;
+import com.example.storage.FileStorageService;
+import com.example.storage.StoredFile;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.UUID;
@@ -17,6 +20,7 @@ import java.util.UUID;
 public class DocumentTemplateServiceImpl implements DocumentTemplateService {
 
     private final DocumentTemplateRepository documentTemplateRepository;
+    private final FileStorageService fileStorageService;
 
     @Override
     public DocumentTemplateResponse create(DocumentTemplateRequest request) {
@@ -54,6 +58,23 @@ public class DocumentTemplateServiceImpl implements DocumentTemplateService {
         documentTemplateRepository.delete(findOrThrow(id));
     }
 
+    @Override
+    public DocumentTemplateResponse uploadSampleFile(UUID id, MultipartFile file) {
+        DocumentTemplate template = findOrThrow(id);
+        StoredFile stored = fileStorageService.upload(file, "document-templates/" + id);
+        template.setSampleFileName(file.getOriginalFilename());
+        template.setSampleFileUrl(stored.url());
+        return toResponse(documentTemplateRepository.save(template));
+    }
+
+    @Override
+    public DocumentTemplateResponse deleteSampleFile(UUID id) {
+        DocumentTemplate template = findOrThrow(id);
+        template.setSampleFileName(null);
+        template.setSampleFileUrl(null);
+        return toResponse(documentTemplateRepository.save(template));
+    }
+
     private DocumentTemplate findOrThrow(UUID id) {
         return documentTemplateRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Document template", id));
@@ -66,6 +87,8 @@ public class DocumentTemplateServiceImpl implements DocumentTemplateService {
                 .name(template.getName())
                 .description(template.getDescription())
                 .status(template.getStatus())
+                .sampleFileName(template.getSampleFileName())
+                .sampleFileUrl(template.getSampleFileUrl())
                 .createdAt(template.getCreatedAt())
                 .updatedAt(template.getUpdatedAt())
                 .build();

@@ -30,6 +30,8 @@ import com.example.loan.repository.GroupMemberRepository;
 import com.example.loan.repository.GroupRepository;
 import com.example.loan.repository.LoanRepository;
 import com.example.loan.service.GroupLoanApplicationService;
+import com.example.storage.FileStorageService;
+import com.example.storage.StoredFile;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -37,6 +39,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -52,6 +55,7 @@ public class GroupLoanApplicationServiceImpl implements GroupLoanApplicationServ
     private final GroupMemberRepository groupMemberRepository;
     private final LoanRepository loanRepository;
     private final CustomerClient customerClient;
+    private final FileStorageService fileStorageService;
 
     @Override
     @Transactional
@@ -189,9 +193,7 @@ public class GroupLoanApplicationServiceImpl implements GroupLoanApplicationServ
     @Override
     public GroupLoanApplicationDocumentResponse addDocument(Long id, GroupLoanApplicationDocumentRequest request) {
         GroupLoanApplication application = findOrThrow(id);
-        if (application.getStatus() == GroupLoanApplicationStatus.WITHDRAWN) {
-            throw new AppException(HttpStatus.CONFLICT, "Cannot add documents to a withdrawn application");
-        }
+        assertNotWithdrawn(application);
         GroupLoanApplicationDocument document = GroupLoanApplicationDocument.builder()
                 .application(application)
                 .documentType(request.getDocumentType())
@@ -201,6 +203,28 @@ public class GroupLoanApplicationServiceImpl implements GroupLoanApplicationServ
                 .uploadedAt(LocalDateTime.now())
                 .build();
         return toDocumentResponse(documentRepository.save(document));
+    }
+
+    @Override
+    public GroupLoanApplicationDocumentResponse uploadDocument(Long id, String documentType, MultipartFile file) {
+        GroupLoanApplication application = findOrThrow(id);
+        assertNotWithdrawn(application);
+        StoredFile stored = fileStorageService.upload(file, "group-applications/" + id);
+        GroupLoanApplicationDocument document = GroupLoanApplicationDocument.builder()
+                .application(application)
+                .documentType(documentType)
+                .fileName(file.getOriginalFilename())
+                .fileUrl(stored.url())
+                .status(DocumentStatus.PENDING)
+                .uploadedAt(LocalDateTime.now())
+                .build();
+        return toDocumentResponse(documentRepository.save(document));
+    }
+
+    private void assertNotWithdrawn(GroupLoanApplication application) {
+        if (application.getStatus() == GroupLoanApplicationStatus.WITHDRAWN) {
+            throw new AppException(HttpStatus.CONFLICT, "Cannot add documents to a withdrawn application");
+        }
     }
 
     @Override

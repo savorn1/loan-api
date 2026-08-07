@@ -39,4 +39,11 @@ public class CustomerIdentity extends BaseEntity {
     @Column(nullable = false)
     @Builder.Default
     private IdentityStatus status = IdentityStatus.ACTIVE;
+
+    // Scanned copy of the physical document (passport photo page, ID card, etc.)
+    @Column(name = "scan_file_name", length = 255)
+    private String scanFileName;
+
+    @Column(name = "scan_file_url", length = 500)
+    private String scanFileUrl;
 }

@@ -28,6 +28,8 @@ import com.example.loan.repository.ApplicationNoteRepository;
 import com.example.loan.repository.ApplicationRepository;
 import com.example.loan.repository.LoanRepository;
 import com.example.loan.service.ApplicationService;
+import com.example.storage.FileStorageService;
+import com.example.storage.StoredFile;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -37,6 +39,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -52,6 +55,7 @@ public class ApplicationServiceImpl implements ApplicationService {
     private final ApplicationApprovalRepository applicationApprovalRepository;
     private final LoanRepository loanRepository;
     private final CustomerClient customerClient;
+    private final FileStorageService fileStorageService;
 
     @Override
     public ApplicationResponse create(ApplicationRequest request) {
@@ -146,9 +150,7 @@ public class ApplicationServiceImpl implements ApplicationService {
     @Override
     public ApplicationDocumentResponse addDocument(Long id, ApplicationDocumentRequest request) {
         Application application = findOrThrow(id);
-        if (application.getStatus() == ApplicationStatus.WITHDRAWN) {
-            throw new AppException(HttpStatus.CONFLICT, "Cannot add documents to a withdrawn application");
-        }
+        assertNotWithdrawn(application);
         ApplicationDocument document = ApplicationDocument.builder()
                 .application(application)
                 .documentType(request.getDocumentType())
@@ -158,6 +160,28 @@ public class ApplicationServiceImpl implements ApplicationService {
                 .uploadedAt(LocalDateTime.now())
                 .build();
         return toDocumentResponse(applicationDocumentRepository.save(document));
+    }
+
+    @Override
+    public ApplicationDocumentResponse uploadDocument(Long id, String documentType, MultipartFile file) {
+        Application application = findOrThrow(id);
+        assertNotWithdrawn(application);
+        StoredFile stored = fileStorageService.upload(file, "applications/" + id);
+        ApplicationDocument document = ApplicationDocument.builder()
+                .application(application)
+                .documentType(documentType)
+                .fileName(file.getOriginalFilename())
+                .fileUrl(stored.url())
+                .status(DocumentStatus.PENDING)
+                .uploadedAt(LocalDateTime.now())
+                .build();
+        return toDocumentResponse(applicationDocumentRepository.save(document));
+    }
+
+    private void assertNotWithdrawn(Application application) {
+        if (application.getStatus() == ApplicationStatus.WITHDRAWN) {
+            throw new AppException(HttpStatus.CONFLICT, "Cannot add documents to a withdrawn application");
+        }
     }
 
     @Override

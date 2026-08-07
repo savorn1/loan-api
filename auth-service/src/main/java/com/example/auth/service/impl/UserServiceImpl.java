@@ -236,6 +236,8 @@ public class UserServiceImpl implements UserService {
                 .id(user.getId())
                 .uuid(user.getUuid().toString())
                 .username(user.getUsername())
+                .email(user.getEmail())
+                .avatarUrl(user.getAvatarUrl())
                 .role(user.getRole().name())
                 .status(user.getStatus().name())
                 .branchId(user.getBranchId())

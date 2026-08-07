@@ -16,6 +16,8 @@ public class DocumentTemplateResponse {
     private String name;
     private String description;
     private DocumentTemplateStatus status;
+    private String sampleFileName;
+    private String sampleFileUrl;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

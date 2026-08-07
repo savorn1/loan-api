@@ -16,6 +16,8 @@ public class UserResponse {
     private Long id;
     private String uuid;
     private String username;
+    private String email;
+    private String avatarUrl;
     private String role;
     private String status;
     private Long branchId;

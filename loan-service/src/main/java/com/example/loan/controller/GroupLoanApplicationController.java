@@ -11,9 +11,11 @@ import com.example.loan.service.GroupLoanApplicationService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -75,6 +77,15 @@ public class GroupLoanApplicationController {
             @PathVariable Long id, @Valid @RequestBody GroupLoanApplicationDocumentRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("Document added", groupLoanApplicationService.addDocument(id, request)));
+    }
+
+    @PostMapping(value = "/{id}/documents/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ApiResponse<GroupLoanApplicationDocumentResponse>> uploadDocument(
+            @PathVariable Long id,
+            @RequestParam String documentType,
+            @RequestParam("file") MultipartFile file) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Document uploaded", groupLoanApplicationService.uploadDocument(id, documentType, file)));
     }
 
     @PreAuthorize("hasRole('ADMIN')")

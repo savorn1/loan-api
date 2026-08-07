@@ -28,6 +28,7 @@
         <module>accounting-service</module>
         <module>notification-service</module>
         <module>branch-service</module>
+        <module>common-storage</module>
     </modules>
 
     <properties>
@@ -35,6 +36,7 @@
         <spring-cloud.version>2025.0.0</spring-cloud.version>
         <jjwt.version>0.12.6</jjwt.version>
         <springdoc.version>2.8.6</springdoc.version>
+        <aws-sdk.version>2.42.34</aws-sdk.version>
     </properties>
 
     <dependencyManagement>
@@ -45,6 +47,18 @@
                 <version>${spring-cloud.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>bom</artifactId>
+                <version>${aws-sdk.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.example</groupId>
+                <artifactId>common-storage</artifactId>
+                <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>io.jsonwebtoken</groupId>

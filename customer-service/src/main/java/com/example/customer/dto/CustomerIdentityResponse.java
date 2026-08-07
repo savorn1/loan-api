@@ -20,6 +20,8 @@ public class CustomerIdentityResponse {
     private LocalDate expiryDate;
     private String issuingCountry;
     private IdentityStatus status;
+    private String scanFileName;
+    private String scanFileUrl;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

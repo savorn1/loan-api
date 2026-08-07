@@ -21,6 +21,7 @@ import com.example.customer.dto.CustomerRequest;
 import com.example.customer.dto.CustomerResponse;
 import com.example.customer.dto.CustomerRiskProfileRequest;
 import com.example.customer.dto.CustomerRiskProfileResponse;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -43,6 +44,10 @@ public interface CustomerService {
     CustomerIdentityResponse updateIdentity(Long customerId, Long identityId, CustomerIdentityRequest request);
 
     void deleteIdentity(Long customerId, Long identityId);
+
+    CustomerIdentityResponse uploadIdentityScan(Long customerId, Long identityId, MultipartFile file);
+
+    CustomerIdentityResponse deleteIdentityScan(Long customerId, Long identityId);
 
     List<CustomerAddressResponse> getAddresses(Long customerId);
 

@@ -8,6 +8,8 @@ import com.example.auth.dto.LoginRequest;
 import com.example.auth.dto.LogoutRequest;
 import com.example.auth.dto.RefreshRequest;
 import com.example.auth.dto.RegisterRequest;
+import com.example.auth.dto.UpdateProfileRequest;
+import com.example.auth.dto.UserResponse;
 import com.example.auth.entity.Permission;
 import com.example.auth.entity.RefreshToken;
 import com.example.auth.entity.SysUser;
@@ -18,6 +20,8 @@ import com.example.auth.repository.RefreshTokenRepository;
 import com.example.auth.repository.SysUserRepository;
 import com.example.auth.service.AuthService;
 import com.example.auth.service.JwtService;
+import com.example.storage.FileStorageService;
+import com.example.storage.StoredFile;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -25,6 +29,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -42,6 +47,7 @@ public class AuthServiceImpl implements AuthService {
     private final JwtService jwtService;
     private final UserSessionStore userSessionStore;
     private final BranchClient branchClient;
+    private final FileStorageService fileStorageService;
 
     @Value("${jwt.refresh-expiration}")
     private long refreshExpiration;
@@ -155,6 +161,59 @@ public class AuthServiceImpl implements AuthService {
         // Force re-login everywhere else after a password change.
         refreshTokenRepository.revokeAllForUser(user.getId());
         userSessionStore.delete(user.getUuid().toString());
+    }
+
+    @Override
+    public UserResponse getMyProfile(String username) {
+        return toUserResponse(findByUsername(username));
+    }
+
+    @Override
+    @Transactional
+    public UserResponse updateMyProfile(String username, UpdateProfileRequest request) {
+        SysUser user = findByUsername(username);
+        user.setEmail(request.getEmail());
+        return toUserResponse(userRepository.save(user));
+    }
+
+    @Override
+    @Transactional
+    public UserResponse uploadAvatar(String username, MultipartFile file) {
+        SysUser user = findByUsername(username);
+        StoredFile stored = fileStorageService.upload(file, "users/" + user.getId() + "/avatar");
+        user.setAvatarFileName(file.getOriginalFilename());
+        user.setAvatarUrl(stored.url());
+        return toUserResponse(userRepository.save(user));
+    }
+
+    @Override
+    @Transactional
+    public UserResponse deleteAvatar(String username) {
+        SysUser user = findByUsername(username);
+        user.setAvatarFileName(null);
+        user.setAvatarUrl(null);
+        return toUserResponse(userRepository.save(user));
+    }
+
+    private SysUser findByUsername(String username) {
+        return userRepository.findByUsername(username)
+                .orElseThrow(() -> new AppException(HttpStatus.UNAUTHORIZED, "Invalid credentials"));
+    }
+
+    private UserResponse toUserResponse(SysUser user) {
+        return UserResponse.builder()
+                .id(user.getId())
+                .uuid(user.getUuid().toString())
+                .username(user.getUsername())
+                .email(user.getEmail())
+                .avatarUrl(user.getAvatarUrl())
+                .role(user.getRole().name())
+                .status(user.getStatus().name())
+                .branchId(user.getBranchId())
+                .branchName(resolveBranchName(user.getBranchId()))
+                .createdAt(user.getCreatedAt())
+                .updatedAt(user.getUpdatedAt())
+                .build();
     }
 
     private void saveSession(SysUser user) {

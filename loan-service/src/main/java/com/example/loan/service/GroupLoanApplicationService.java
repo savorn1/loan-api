@@ -6,6 +6,7 @@ import com.example.loan.dto.GroupLoanApplicationDocumentRequest;
 import com.example.loan.dto.GroupLoanApplicationDocumentResponse;
 import com.example.loan.dto.GroupLoanApplicationRequest;
 import com.example.loan.dto.GroupLoanApplicationResponse;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -26,6 +27,8 @@ public interface GroupLoanApplicationService {
     GroupLoanApplicationResponse addApproval(Long id, GroupLoanApplicationApprovalRequest request);
 
     GroupLoanApplicationDocumentResponse addDocument(Long id, GroupLoanApplicationDocumentRequest request);
+
+    GroupLoanApplicationDocumentResponse uploadDocument(Long id, String documentType, MultipartFile file);
 
     GroupLoanApplicationDocumentResponse verifyDocument(Long id, Long documentId);
 

@@ -12,9 +12,11 @@ COPY loan-product-service/pom.xml loan-product-service/
 COPY accounting-service/pom.xml   accounting-service/
 COPY notification-service/pom.xml notification-service/
 COPY branch-service/pom.xml       branch-service/
+COPY common-storage/pom.xml     common-storage/
 
 RUN mvn dependency:go-offline -pl auth-service -am -q || true
 
+COPY common-storage/src common-storage/src
 COPY auth-service/src auth-service/src
 RUN mvn package -pl auth-service -am -DskipTests
 

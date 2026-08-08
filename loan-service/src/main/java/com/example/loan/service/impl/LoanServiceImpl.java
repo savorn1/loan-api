@@ -1,5 +1,6 @@
 package com.example.loan.service.impl;
 
+import com.example.loan.client.AccountingClient;
 import com.example.loan.client.CustomerClient;
 import com.example.loan.client.PaymentClient;
 import com.example.loan.common.PageResponse;
@@ -7,6 +8,8 @@ import com.example.loan.dto.ApplyPaymentRequest;
 import com.example.loan.dto.CustomerResponse;
 import com.example.loan.dto.DisbursementReasonRequest;
 import com.example.loan.dto.GenerateScheduleRequest;
+import com.example.loan.dto.JournalEntryGenerateRequest;
+import com.example.loan.dto.JournalEntryResponse;
 import com.example.loan.dto.LoanAdjustmentRequest;
 import com.example.loan.dto.LoanAdjustmentResponse;
 import com.example.loan.dto.LoanCollateralRequest;
@@ -46,6 +49,7 @@ import com.example.loan.dto.LoanWriteoffResponse;
 import com.example.loan.dto.ScheduleInstallmentRequest;
 import com.example.loan.entity.AdjustmentType;
 import com.example.loan.entity.CollateralStatus;
+import com.example.loan.entity.DisbursementMethod;
 import com.example.loan.entity.DisbursementStatus;
 import com.example.loan.entity.FeeStatus;
 import com.example.loan.entity.GuarantorStatus;
@@ -126,6 +130,7 @@ public class LoanServiceImpl implements LoanService {
     private final LoanRepository loanRepository;
     private final CustomerClient customerClient;
     private final PaymentClient paymentClient;
+    private final AccountingClient accountingClient;
     private final LoanStatusHistoryRepository loanStatusHistoryRepository;
     private final LoanDisbursementRepository loanDisbursementRepository;
     private final LoanGuarantorRepository loanGuarantorRepository;
@@ -247,6 +252,7 @@ public class LoanServiceImpl implements LoanService {
     }
 
     @Override
+    @Transactional
     public LoanResponse disburse(Long id) {
         Loan loan = findOrThrow(id);
         if (loan.getStatus() != LoanStatus.APPROVED) {
@@ -296,12 +302,39 @@ public class LoanServiceImpl implements LoanService {
     }
 
     @Override
+    @Transactional
     public LoanResponse applyPayment(Long id, ApplyPaymentRequest request) {
         Loan loan = findOrThrow(id);
         if (loan.getStatus() != LoanStatus.ACTIVE) {
             throw new AppException(HttpStatus.CONFLICT, "Payments can only be applied to ACTIVE loans");
         }
-        BigDecimal newBalance = loan.getOutstandingBalance().subtract(request.getAmount());
+        LocalDate paymentDate = LocalDate.now();
+
+        // Callers of this action (payment-service's markAsPaid) only ever have an amount,
+        // not a channel — DisbursementMethod.OTHER records that honestly instead of
+        // guessing. Still creates a real LoanPayment/LoanPaymentDetail trail and allocates
+        // against the schedule via allocatePayment, same as addPayment, instead of dumping
+        // the whole amount as PRINCIPAL_PAYMENT: a payment that's mostly interest was
+        // otherwise posted entirely to principal, understating interest income.
+        LoanPayment payment = LoanPayment.builder()
+                .loan(loan)
+                .amount(request.getAmount())
+                .paymentDate(paymentDate)
+                .method(DisbursementMethod.OTHER)
+                .reference("Applied via legacy apply-payment action")
+                .build();
+        LoanPayment savedPayment = loanPaymentRepository.save(payment);
+        savedPayment.setPaymentNo(generatePaymentNo(savedPayment));
+        savedPayment = loanPaymentRepository.save(savedPayment);
+
+        // Same waterfall as addPayment: fees, then penalties, then the schedule. See
+        // applyToOutstandingFeesAndPenalties for why only the remainder reduces the balance.
+        BigDecimal feesAndPenaltiesApplied =
+                applyToOutstandingFeesAndPenalties(loan, request.getAmount(), paymentDate);
+        BigDecimal remainingForSchedule = request.getAmount().subtract(feesAndPenaltiesApplied);
+        List<LoanPaymentDetail> details = allocatePayment(loan, savedPayment, remainingForSchedule);
+
+        BigDecimal newBalance = loan.getOutstandingBalance().subtract(remainingForSchedule);
         if (newBalance.compareTo(BigDecimal.ZERO) < 0) {
             newBalance = BigDecimal.ZERO;
         }
@@ -315,8 +348,26 @@ public class LoanServiceImpl implements LoanService {
         if (closing) {
             recordStatusHistory(saved, LoanStatus.ACTIVE, LoanStatus.CLOSED, null);
         }
-        recordTransaction(saved, TransactionType.PRINCIPAL_PAYMENT, request.getAmount(), LocalDate.now(),
-                "Loan", saved.getId(), "Applied via legacy apply-payment action");
+
+        BigDecimal totalAllocated = BigDecimal.ZERO;
+        for (LoanPaymentDetail detail : details) {
+            String description = "Installment #" + detail.getScheduleInstallment().getInstallmentNumber();
+            if (detail.getPrincipalAmount().compareTo(BigDecimal.ZERO) > 0) {
+                recordTransaction(saved, TransactionType.PRINCIPAL_PAYMENT, detail.getPrincipalAmount(),
+                        paymentDate, "LoanPaymentDetail", detail.getId(), description);
+            }
+            if (detail.getInterestAmount().compareTo(BigDecimal.ZERO) > 0) {
+                recordTransaction(saved, TransactionType.INTEREST_PAYMENT, detail.getInterestAmount(),
+                        paymentDate, "LoanPaymentDetail", detail.getId(), description);
+            }
+            totalAllocated = totalAllocated.add(detail.getPrincipalAmount()).add(detail.getInterestAmount());
+        }
+        BigDecimal unallocated = remainingForSchedule.subtract(totalAllocated);
+        if (unallocated.compareTo(BigDecimal.ZERO) > 0) {
+            recordTransaction(saved, TransactionType.PRINCIPAL_PAYMENT, unallocated,
+                    paymentDate, "LoanPayment", savedPayment.getId(), "Unallocated payment amount");
+        }
+
         CustomerResponse customer = customerClient.getById(saved.getCustomerId()).getData();
         return toResponse(saved, customer);
     }
@@ -406,6 +457,7 @@ public class LoanServiceImpl implements LoanService {
     }
 
     @Override
+    @Transactional
     public LoanDisbursementResponse approveDisbursement(Long id, Long disbursementId) {
         LoanDisbursement disbursement = findDisbursementOrThrow(id, disbursementId);
         if (disbursement.getStatus() != DisbursementStatus.PENDING_APPROVAL) {
@@ -419,8 +471,13 @@ public class LoanServiceImpl implements LoanService {
         disbursement.setReviewedAt(LocalDateTime.now());
         LoanDisbursement saved = loanDisbursementRepository.save(disbursement);
 
-        recordTransaction(saved.getLoan(), TransactionType.DISBURSEMENT, saved.getAmount(), saved.getDisbursedDate(),
-                "LoanDisbursement", saved.getId(), saved.getReference());
+        Long journalEntryId = recordTransaction(saved.getLoan(), TransactionType.DISBURSEMENT, saved.getAmount(),
+                saved.getDisbursedDate(), "LoanDisbursement", saved.getId(), saved.getReference());
+        if (journalEntryId != null) {
+            // Remembered so voidDisbursement can reverse this specific entry later.
+            saved.setJournalEntryId(journalEntryId);
+            saved = loanDisbursementRepository.save(saved);
+        }
         return toDisbursementResponse(saved);
     }
 
@@ -440,6 +497,7 @@ public class LoanServiceImpl implements LoanService {
     }
 
     @Override
+    @Transactional
     public LoanDisbursementResponse voidDisbursement(Long id, Long disbursementId, DisbursementReasonRequest request) {
         LoanDisbursement disbursement = findDisbursementOrThrow(id, disbursementId);
         if (disbursement.getStatus() != DisbursementStatus.APPROVED) {
@@ -454,6 +512,11 @@ public class LoanServiceImpl implements LoanService {
 
         recordTransaction(saved.getLoan(), TransactionType.ADJUSTMENT, saved.getAmount().negate(), LocalDate.now(),
                 "LoanDisbursement", saved.getId(), "Void: " + request.getReason());
+        if (saved.getJournalEntryId() != null) {
+            // Reverses the specific entry approveDisbursement generated, rather than relying
+            // on the local ADJUSTMENT above (which has no accounting-service equivalent).
+            accountingClient.reverse(saved.getJournalEntryId());
+        }
         return toDisbursementResponse(saved);
     }
 
@@ -680,9 +743,15 @@ public class LoanServiceImpl implements LoanService {
         savedPayment.setPaymentNo(generatePaymentNo(savedPayment));
         savedPayment = loanPaymentRepository.save(savedPayment);
 
-        List<LoanPaymentDetail> details = allocatePayment(loan, savedPayment, request.getAmount());
+        // Waterfall: fees, then penalties (both paid in full or not at all), then whatever's
+        // left goes against the schedule. Only the schedule portion reduces outstandingBalance
+        // — see applyToOutstandingFeesAndPenalties for why.
+        BigDecimal feesAndPenaltiesApplied =
+                applyToOutstandingFeesAndPenalties(loan, request.getAmount(), request.getPaymentDate());
+        BigDecimal remainingForSchedule = request.getAmount().subtract(feesAndPenaltiesApplied);
+        List<LoanPaymentDetail> details = allocatePayment(loan, savedPayment, remainingForSchedule);
 
-        BigDecimal newBalance = loan.getOutstandingBalance().subtract(request.getAmount());
+        BigDecimal newBalance = loan.getOutstandingBalance().subtract(remainingForSchedule);
         if (newBalance.compareTo(BigDecimal.ZERO) < 0) {
             newBalance = BigDecimal.ZERO;
         }
@@ -714,7 +783,7 @@ public class LoanServiceImpl implements LoanService {
         }
         // No ACTIVE schedule, or the payment exceeds every unpaid installment
         // (e.g. an overpayment) — still record the balance reduction.
-        BigDecimal unallocated = request.getAmount().subtract(totalAllocated);
+        BigDecimal unallocated = remainingForSchedule.subtract(totalAllocated);
         if (unallocated.compareTo(BigDecimal.ZERO) > 0) {
             recordTransaction(savedLoan, TransactionType.PRINCIPAL_PAYMENT, unallocated,
                     request.getPaymentDate(), "LoanPayment", savedPayment.getId(), "Unallocated payment amount");
@@ -821,6 +890,7 @@ public class LoanServiceImpl implements LoanService {
     }
 
     @Override
+    @Transactional
     public LoanPenaltyResponse payPenalty(Long id, Long penaltyId) {
         Loan loan = findOrThrow(id);
         LoanPenalty penalty = findPenaltyOrThrow(id, penaltyId);
@@ -900,6 +970,7 @@ public class LoanServiceImpl implements LoanService {
     }
 
     @Override
+    @Transactional
     public LoanFeeResponse payFee(Long id, Long feeId) {
         Loan loan = findOrThrow(id);
         LoanFee fee = findFeeOrThrow(id, feeId);
@@ -977,12 +1048,19 @@ public class LoanServiceImpl implements LoanService {
     }
 
     @Override
+    @Transactional
     public LoanRefinanceResponse addRefinance(Long id, LoanRefinanceRequest request) {
         Loan loan = findOrThrow(id);
         if (loan.getStatus() != LoanStatus.ACTIVE) {
             throw new AppException(HttpStatus.CONFLICT, "Only ACTIVE loans can be refinanced");
         }
-        findOrThrow(request.getNewLoanId());
+        if (request.getNewLoanId().equals(id)) {
+            throw new AppException(HttpStatus.BAD_REQUEST, "A loan cannot be refinanced into itself");
+        }
+        Loan newLoan = findOrThrow(request.getNewLoanId());
+        if (!newLoan.getCustomerId().equals(loan.getCustomerId())) {
+            throw new AppException(HttpStatus.BAD_REQUEST, "The replacement loan must belong to the same customer");
+        }
 
         LoanRefinance refinance = LoanRefinance.builder()
                 .loan(loan)
@@ -990,7 +1068,29 @@ public class LoanServiceImpl implements LoanService {
                 .reason(request.getReason())
                 .effectiveDate(request.getEffectiveDate())
                 .build();
-        return toRefinanceResponse(loanRefinanceRepository.save(refinance));
+        LoanRefinance savedRefinance = loanRefinanceRepository.save(refinance);
+
+        // Previously this only wrote the note above and left the old loan ACTIVE with its
+        // own outstanding balance forever — both loans stayed on the books simultaneously,
+        // double-counting in portfolio totals (including the GL reconciliation check).
+        // Refinancing means this balance is paid off by the new loan, not written off or
+        // forgiven, but there's no cash transaction backing it either — booked as a
+        // loan-service-only ADJUSTMENT (same treatment as voidDisbursement's local entry)
+        // rather than inventing an accounting-service TransactionType with no sign-off.
+        BigDecimal payoffAmount = loan.getOutstandingBalance();
+        LoanStatus previousStatus = loan.getStatus();
+        loan.setOutstandingBalance(BigDecimal.ZERO);
+        loan.setStatus(LoanStatus.CLOSED);
+        loan.setClosedAt(LocalDateTime.now());
+        Loan savedLoan = loanRepository.save(loan);
+        recordStatusHistory(savedLoan, previousStatus, LoanStatus.CLOSED,
+                "Refinanced into loan #" + request.getNewLoanId());
+        if (payoffAmount.compareTo(BigDecimal.ZERO) > 0) {
+            recordTransaction(savedLoan, TransactionType.ADJUSTMENT, payoffAmount.negate(), request.getEffectiveDate(),
+                    "LoanRefinance", savedRefinance.getId(), "Payoff via refinance into loan #" + request.getNewLoanId());
+        }
+
+        return toRefinanceResponse(savedRefinance);
     }
 
     @Override
@@ -1191,7 +1291,10 @@ public class LoanServiceImpl implements LoanService {
     // Appends one row to the unified money-movement ledger. Called after the
     // loan's outstandingBalance has already been saved for whatever action
     // triggered it, so balanceAfter is always the real post-event balance.
-    private void recordTransaction(Loan loan, TransactionType type, BigDecimal amount, LocalDate transactionDate,
+    // Returns the accounting-service JournalEntry id created for this transaction, or null
+    // if the type has no accounting equivalent (ADJUSTMENT/SETTLEMENT) — callers that need
+    // to reverse the posting later (e.g. voidDisbursement) persist this id themselves.
+    private Long recordTransaction(Loan loan, TransactionType type, BigDecimal amount, LocalDate transactionDate,
                                     String referenceType, Long referenceId, String description) {
         LoanTransaction transaction = LoanTransaction.builder()
                 .loan(loan)
@@ -1203,7 +1306,47 @@ public class LoanServiceImpl implements LoanService {
                 .description(description)
                 .balanceAfter(loan.getOutstandingBalance())
                 .build();
-        loanTransactionRepository.save(transaction);
+        transaction = loanTransactionRepository.save(transaction);
+
+        String accountingTransactionType = toAccountingTransactionType(type);
+        if (accountingTransactionType == null) {
+            // ADJUSTMENT/SETTLEMENT have no accounting-service TransactionType equivalent
+            // yet — left as loan-service-only ledger entries until one is defined.
+            return null;
+        }
+        // referenceType/referenceId sent to accounting-service always point at this
+        // LoanTransaction row rather than passing through the caller's own reference
+        // (LoanPenalty, LoanFee, ...): it's guaranteed unique per call — required for
+        // accounting-service's idempotency check on (transactionType, referenceType,
+        // referenceId), since e.g. every principal payment on a loan would otherwise share
+        // the same "Loan"/loanId pair and collide. It also carries the loan link (via
+        // LoanTransaction.loan) and the original sub-entity reference in one hop, so nothing
+        // is lost — see JournalEntryServiceImpl.generate's idempotency check.
+        JournalEntryResponse response = accountingClient.generate(JournalEntryGenerateRequest.builder()
+                .transactionType(accountingTransactionType)
+                .transactionDate(transactionDate)
+                .branchId(loan.getBranchId())
+                .referenceType("LoanTransaction")
+                .referenceId(transaction.getId().toString())
+                .amount(amount)
+                .description(description)
+                .build()).getData();
+        return response != null ? response.getId() : null;
+    }
+
+    // Maps loan-service's TransactionType to accounting-service's — the two enums don't
+    // share names for every case (PENALTY_PAYMENT/PENALTY_CHARGE, FEE_PAYMENT/FEE_CHARGE,
+    // WRITE_OFF/LOAN_WRITE_OFF), and ADJUSTMENT/SETTLEMENT have no equivalent at all.
+    private String toAccountingTransactionType(TransactionType type) {
+        return switch (type) {
+            case DISBURSEMENT -> "DISBURSEMENT";
+            case PRINCIPAL_PAYMENT -> "PRINCIPAL_PAYMENT";
+            case INTEREST_PAYMENT -> "INTEREST_PAYMENT";
+            case PENALTY_PAYMENT -> "PENALTY_CHARGE";
+            case FEE_PAYMENT -> "FEE_CHARGE";
+            case WRITE_OFF -> "LOAN_WRITE_OFF";
+            case ADJUSTMENT, SETTLEMENT -> null;
+        };
     }
 
     private LoanAdjustmentResponse toAdjustmentResponse(LoanAdjustment adjustment) {
@@ -1233,11 +1376,53 @@ public class LoanServiceImpl implements LoanService {
                 .build();
     }
 
-    // Waterfall allocation against the loan's ACTIVE schedule: oldest unpaid
-    // installment first, interest before principal within each installment.
-    // No-ops (payment recorded, nothing allocated) if the loan has no ACTIVE
-    // schedule yet. Penalties aren't wired into this pass — LoanPenalty has
-    // its own pay/waive actions on a separate ledger.
+    // First stage of the payment waterfall: oldest pending fee first, then oldest pending
+    // penalty, each paid in full or not at all (LoanFee/LoanPenalty have no partial-paid
+    // status — unlike schedule installments, which support PARTIALLY_PAID). Returns how
+    // much of paymentAmount this consumed, so the caller passes only the remainder into
+    // allocatePayment/outstandingBalance: fees and penalties are tracked separately from
+    // Loan.outstandingBalance (see payFee/payPenalty, neither of which touches it), so a
+    // payment that goes toward a fee must not also be subtracted from the principal/interest
+    // balance, or the loan would look more paid down than it actually is.
+    private BigDecimal applyToOutstandingFeesAndPenalties(Loan loan, BigDecimal paymentAmount, LocalDate paymentDate) {
+        BigDecimal remaining = paymentAmount;
+
+        List<LoanFee> pendingFees = loanFeeRepository.findByLoanIdOrderByChargedDateAsc(loan.getId()).stream()
+                .filter(fee -> fee.getStatus() == FeeStatus.PENDING)
+                .toList();
+        for (LoanFee fee : pendingFees) {
+            if (remaining.compareTo(fee.getAmount()) < 0) {
+                break;
+            }
+            fee.setStatus(FeeStatus.PAID);
+            fee.setPaidAt(LocalDateTime.now());
+            LoanFee saved = loanFeeRepository.save(fee);
+            recordTransaction(loan, TransactionType.FEE_PAYMENT, saved.getAmount(), paymentDate,
+                    "LoanFee", saved.getId(), saved.getDescription());
+            remaining = remaining.subtract(saved.getAmount());
+        }
+
+        List<LoanPenalty> pendingPenalties = loanPenaltyRepository.findByLoanIdOrderByAppliedDateAsc(loan.getId()).stream()
+                .filter(penalty -> penalty.getStatus() == PenaltyStatus.PENDING)
+                .toList();
+        for (LoanPenalty penalty : pendingPenalties) {
+            if (remaining.compareTo(penalty.getAmount()) < 0) {
+                break;
+            }
+            penalty.setStatus(PenaltyStatus.PAID);
+            penalty.setPaidAt(LocalDateTime.now());
+            LoanPenalty saved = loanPenaltyRepository.save(penalty);
+            recordTransaction(loan, TransactionType.PENALTY_PAYMENT, saved.getAmount(), paymentDate,
+                    "LoanPenalty", saved.getId(), saved.getReason());
+            remaining = remaining.subtract(saved.getAmount());
+        }
+
+        return paymentAmount.subtract(remaining);
+    }
+
+    // Second stage of the waterfall, against the loan's ACTIVE schedule: oldest unpaid
+    // installment first, interest before principal within each installment. No-ops (payment
+    // recorded, nothing allocated) if the loan has no ACTIVE schedule yet.
     private List<LoanPaymentDetail> allocatePayment(Loan loan, LoanPayment payment, BigDecimal paymentAmount) {
         List<LoanPaymentDetail> createdDetails = new ArrayList<>();
         List<LoanSchedule> activeSchedules = loanScheduleRepository.findByLoanIdAndStatus(loan.getId(), ScheduleStatus.ACTIVE);

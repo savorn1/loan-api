@@ -2,6 +2,7 @@ package com.example.accounting.controller;
 
 import com.example.accounting.common.ApiResponse;
 import com.example.accounting.dto.JournalAuditLogResponse;
+import com.example.accounting.dto.JournalEntryGenerateRequest;
 import com.example.accounting.dto.JournalEntryRequest;
 import com.example.accounting.dto.JournalEntryResponse;
 import com.example.accounting.service.JournalAuditLogService;
@@ -29,6 +30,17 @@ public class JournalEntryController {
                 .body(ApiResponse.success("Journal entry created as draft", journalEntryService.create(request)));
     }
 
+    // Called by loan-service/payment-service instead of them building lines themselves —
+    // resolves transactionType -> JournalTemplate -> AccountingScheme and posts immediately.
+    // No @PreAuthorize: this is an internal Feign call with no user JWT attached, unlike
+    // the user-driven /{id}/post below.
+    @PostMapping("/generate")
+    public ResponseEntity<ApiResponse<JournalEntryResponse>> generate(
+            @Valid @RequestBody JournalEntryGenerateRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Journal entry generated and posted", journalEntryService.generate(request)));
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<JournalEntryResponse>> getById(@PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.success(journalEntryService.getById(id)));
@@ -49,6 +61,13 @@ public class JournalEntryController {
     @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/{id}/reverse")
     public ResponseEntity<ApiResponse<JournalEntryResponse>> reverse(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.success("Journal entry reversed", journalEntryService.reverse(id)));
+    }
+
+    // Same operation as /{id}/reverse, without @PreAuthorize — for internal Feign calls (no
+    // user JWT) triggered by an upstream correction, e.g. loan-service's voidDisbursement.
+    @PostMapping("/{id}/system-reverse")
+    public ResponseEntity<ApiResponse<JournalEntryResponse>> systemReverse(@PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.success("Journal entry reversed", journalEntryService.reverse(id)));
     }
 

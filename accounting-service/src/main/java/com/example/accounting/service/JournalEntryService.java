@@ -1,5 +1,6 @@
 package com.example.accounting.service;
 
+import com.example.accounting.dto.JournalEntryGenerateRequest;
 import com.example.accounting.dto.JournalEntryRequest;
 import com.example.accounting.dto.JournalEntryResponse;
 
@@ -8,6 +9,10 @@ import java.util.List;
 public interface JournalEntryService {
 
     JournalEntryResponse create(JournalEntryRequest request);
+
+    // Resolves transactionType -> JournalTemplate -> AccountingScheme into a balanced
+    // two-line entry and posts it immediately (see JournalEntryServiceImpl.generate).
+    JournalEntryResponse generate(JournalEntryGenerateRequest request);
 
     JournalEntryResponse getById(Long id);
 

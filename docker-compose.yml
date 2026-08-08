@@ -35,6 +35,10 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: dev
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-server:8761/eureka/
+      # Same default baked into every service's application.properties/yml
+      # (jwt.secret=${JWT_SECRET:...}) — set JWT_SECRET once here (or in .env) to rotate
+      # it everywhere instead of editing 9 files.
+      JWT_SECRET: ${JWT_SECRET:-5JzoMqNmIFBDIk6nEqB6tCrLn2FGH4KkPcVpTZFm3UsXgYwRdUaE8lVjQ9sHbON0}
     depends_on:
       discovery-server:
         condition: service_healthy
@@ -58,6 +62,7 @@ services:
       SPRING_DATA_REDIS_PORT: 6379
       SPRING_DATA_REDIS_PASSWORD: 123456
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-server:8761/eureka/
+      JWT_SECRET: ${JWT_SECRET:-5JzoMqNmIFBDIk6nEqB6tCrLn2FGH4KkPcVpTZFm3UsXgYwRdUaE8lVjQ9sHbON0}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-minioadmin}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-minioadmin}
       AWS_REGION: ${AWS_REGION:-us-east-1}
@@ -84,11 +89,12 @@ services:
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://host.docker.internal:5432/customer_db
       SPRING_DATASOURCE_USERNAME: postgres
-      SPRING_DATASOURCE_PASSWORD: 
+      SPRING_DATASOURCE_PASSWORD:
       SPRING_DATA_REDIS_HOST: host.docker.internal
       SPRING_DATA_REDIS_PORT: 6379
       SPRING_DATA_REDIS_PASSWORD: 123456
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-server:8761/eureka/
+      JWT_SECRET: ${JWT_SECRET:-5JzoMqNmIFBDIk6nEqB6tCrLn2FGH4KkPcVpTZFm3UsXgYwRdUaE8lVjQ9sHbON0}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-minioadmin}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-minioadmin}
       AWS_REGION: ${AWS_REGION:-us-east-1}
@@ -117,6 +123,7 @@ services:
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD:
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-server:8761/eureka/
+      JWT_SECRET: ${JWT_SECRET:-5JzoMqNmIFBDIk6nEqB6tCrLn2FGH4KkPcVpTZFm3UsXgYwRdUaE8lVjQ9sHbON0}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-minioadmin}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-minioadmin}
       AWS_REGION: ${AWS_REGION:-us-east-1}
@@ -144,8 +151,9 @@ services:
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://host.docker.internal:5432/payment_db
       SPRING_DATASOURCE_USERNAME: postgres
-      SPRING_DATASOURCE_PASSWORD: 
+      SPRING_DATASOURCE_PASSWORD:
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-server:8761/eureka/
+      JWT_SECRET: ${JWT_SECRET:-5JzoMqNmIFBDIk6nEqB6tCrLn2FGH4KkPcVpTZFm3UsXgYwRdUaE8lVjQ9sHbON0}
     depends_on:
       - discovery-server
       - loan-service
@@ -164,6 +172,7 @@ services:
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD:
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-server:8761/eureka/
+      JWT_SECRET: ${JWT_SECRET:-5JzoMqNmIFBDIk6nEqB6tCrLn2FGH4KkPcVpTZFm3UsXgYwRdUaE8lVjQ9sHbON0}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-minioadmin}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-minioadmin}
       AWS_REGION: ${AWS_REGION:-us-east-1}
@@ -192,6 +201,7 @@ services:
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD:
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-server:8761/eureka/
+      JWT_SECRET: ${JWT_SECRET:-5JzoMqNmIFBDIk6nEqB6tCrLn2FGH4KkPcVpTZFm3UsXgYwRdUaE8lVjQ9sHbON0}
     depends_on:
       - discovery-server
     networks:
@@ -212,6 +222,7 @@ services:
       SPRING_MAIL_PORT: 1025
       SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH: "false"
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-server:8761/eureka/
+      JWT_SECRET: ${JWT_SECRET:-5JzoMqNmIFBDIk6nEqB6tCrLn2FGH4KkPcVpTZFm3UsXgYwRdUaE8lVjQ9sHbON0}
     depends_on:
       - discovery-server
       - mailhog
@@ -230,6 +241,7 @@ services:
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD:
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-server:8761/eureka/
+      JWT_SECRET: ${JWT_SECRET:-5JzoMqNmIFBDIk6nEqB6tCrLn2FGH4KkPcVpTZFm3UsXgYwRdUaE8lVjQ9sHbON0}
     depends_on:
       - discovery-server
     networks:

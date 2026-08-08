@@ -1,9 +1,12 @@
 package com.example.accounting.service.impl;
 
+import com.example.accounting.dto.JournalEntryGenerateRequest;
 import com.example.accounting.dto.JournalEntryLineRequest;
 import com.example.accounting.dto.JournalEntryLineResponse;
 import com.example.accounting.dto.JournalEntryRequest;
 import com.example.accounting.dto.JournalEntryResponse;
+import com.example.accounting.entity.AccountingScheme;
+import com.example.accounting.entity.AccountingSchemeStatus;
 import com.example.accounting.entity.EntrySide;
 import com.example.accounting.entity.FinancialPeriod;
 import com.example.accounting.entity.FinancialPeriodStatus;
@@ -12,11 +15,15 @@ import com.example.accounting.entity.JournalAuditAction;
 import com.example.accounting.entity.JournalEntry;
 import com.example.accounting.entity.JournalEntryLine;
 import com.example.accounting.entity.JournalEntryStatus;
+import com.example.accounting.entity.JournalTemplate;
+import com.example.accounting.entity.JournalTemplateStatus;
 import com.example.accounting.exception.AppException;
 import com.example.accounting.exception.ResourceNotFoundException;
+import com.example.accounting.repository.AccountingSchemeRepository;
 import com.example.accounting.repository.FinancialPeriodRepository;
 import com.example.accounting.repository.GlAccountRepository;
 import com.example.accounting.repository.JournalEntryRepository;
+import com.example.accounting.repository.JournalTemplateRepository;
 import com.example.accounting.service.GeneralLedgerService;
 import com.example.accounting.service.JournalAuditLogService;
 import com.example.accounting.service.JournalEntryService;
@@ -29,15 +36,24 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
 public class JournalEntryServiceImpl implements JournalEntryService {
 
+    // Every AccountingScheme configured today is USD — the generate() endpoint exists so
+    // upstream services never have to resolve account roles themselves, so it isn't given
+    // a currency to pass through either. Revisit if a non-USD scheme is ever added.
+    private static final String GENERATED_CURRENCY = "USD";
+
     private final JournalEntryRepository journalEntryRepository;
     private final FinancialPeriodRepository financialPeriodRepository;
     private final GlAccountRepository glAccountRepository;
+    private final JournalTemplateRepository journalTemplateRepository;
+    private final AccountingSchemeRepository accountingSchemeRepository;
     private final GeneralLedgerService generalLedgerService;
     private final JournalAuditLogService journalAuditLogService;
 
@@ -71,6 +87,68 @@ public class JournalEntryServiceImpl implements JournalEntryService {
         journalAuditLogService.record(entry, JournalAuditAction.CREATED,
                 "Created as draft with " + entry.getLines().size() + " lines");
         return toResponse(entry);
+    }
+
+    @Override
+    @Transactional
+    public JournalEntryResponse generate(JournalEntryGenerateRequest request) {
+        Optional<JournalEntry> existing = journalEntryRepository.findByTransactionTypeAndReferenceTypeAndReferenceId(
+                request.getTransactionType(), request.getReferenceType(), request.getReferenceId());
+        if (existing.isPresent()) {
+            // A retried Feign call (timeout, network blip) for the same business event —
+            // return what's already posted instead of duplicating it.
+            return toResponse(existing.get());
+        }
+
+        List<JournalTemplate> templates = journalTemplateRepository
+                .findByTransactionType(request.getTransactionType())
+                .stream()
+                .filter(t -> t.getStatus() == JournalTemplateStatus.ACTIVE)
+                .toList();
+        if (templates.isEmpty()) {
+            throw new AppException(HttpStatus.BAD_REQUEST,
+                    "No active journal template configured for " + request.getTransactionType());
+        }
+        if (templates.size() > 1) {
+            throw new AppException(HttpStatus.CONFLICT,
+                    "Multiple active journal templates configured for " + request.getTransactionType()
+                            + " — cannot pick one automatically");
+        }
+        JournalTemplate template = templates.get(0);
+
+        List<JournalEntryLineRequest> lines = new ArrayList<>();
+        for (var templateLine : template.getLines()) {
+            AccountingScheme scheme = accountingSchemeRepository
+                    .findByJournalTemplateIdAndAccountRoleAndCurrency(
+                            template.getId(), templateLine.getAccountRole(), GENERATED_CURRENCY)
+                    .filter(s -> s.getStatus() == AccountingSchemeStatus.ACTIVE)
+                    .orElseThrow(() -> new AppException(HttpStatus.BAD_REQUEST,
+                            "No active accounting scheme binds role " + templateLine.getAccountRole()
+                                    + " on template " + template.getCode() + " to a " + GENERATED_CURRENCY
+                                    + " GL account"));
+
+            JournalEntryLineRequest line = new JournalEntryLineRequest();
+            line.setLineNo(templateLine.getLineNo());
+            line.setGlAccountId(scheme.getGlAccount().getId());
+            line.setEntrySide(templateLine.getEntrySide());
+            line.setAmount(request.getAmount());
+            line.setDescription(templateLine.getDescription());
+            lines.add(line);
+        }
+
+        JournalEntryRequest createRequest = new JournalEntryRequest();
+        createRequest.setTransactionType(request.getTransactionType());
+        createRequest.setTransactionDate(request.getTransactionDate());
+        createRequest.setBranchId(request.getBranchId());
+        createRequest.setReferenceType(request.getReferenceType());
+        createRequest.setReferenceId(request.getReferenceId());
+        createRequest.setCurrency(GENERATED_CURRENCY);
+        createRequest.setDescription(
+                request.getDescription() != null ? request.getDescription() : template.getName());
+        createRequest.setLines(lines);
+
+        JournalEntryResponse draft = create(createRequest);
+        return post(draft.getId());
     }
 
     @Override

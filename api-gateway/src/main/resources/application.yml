@@ -104,6 +104,11 @@ spring:
               predicates:
                 - Path=/api/trial-balance/**
 
+            - id: accounting-service-reconciliation
+              uri: lb://accounting-service
+              predicates:
+                - Path=/api/reconciliation/**
+
             - id: accounting-service-reports
               uri: lb://accounting-service
               predicates:
@@ -183,9 +188,12 @@ eureka:
   instance:
     prefer-ip-address: true
 
-# Shared JWT secret — must match the value in auth-service
+# Shared JWT secret — must match the value in auth-service. Reads JWT_SECRET if set
+# (docker-compose.yml/docker-compose.prod.yml), falling back to this default otherwise —
+# every other service's jwt.secret follows the same ${JWT_SECRET:default} pattern, so
+# setting the env var once actually rotates it everywhere instead of needing 9 file edits.
 jwt:
-  secret: 5JzoMqNmIFBDIk6nEqB6tCrLn2FGH4KkPcVpTZFm3UsXgYwRdUaE8lVjQ9sHbON0
+  secret: ${JWT_SECRET:5JzoMqNmIFBDIk6nEqB6tCrLn2FGH4KkPcVpTZFm3UsXgYwRdUaE8lVjQ9sHbON0}
 
 # Aggregated Swagger UI — one page that shows all services
 springdoc:

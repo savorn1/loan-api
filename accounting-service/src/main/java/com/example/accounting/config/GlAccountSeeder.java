@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -15,9 +16,13 @@ import java.util.List;
 // Without this, a fresh environment has no chart of accounts at all and every
 // journal template/accounting scheme has nothing to bind to (see AdminSeeder
 // in auth-service for the same idempotent-seed pattern this mirrors).
+// @Order(1) — must run before JournalTemplateSeeder, which looks up these accounts by
+// number; CommandLineRunner beans without an explicit @Order sort last (Integer.MAX_VALUE),
+// which would otherwise run this after JournalTemplateSeeder's @Order(2).
 @Component
 @RequiredArgsConstructor
 @Slf4j
+@Order(1)
 public class GlAccountSeeder implements CommandLineRunner {
 
     private final GlAccountRepository glAccountRepository;

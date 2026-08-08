@@ -14,4 +14,8 @@ public interface FinancialPeriodRepository extends JpaRepository<FinancialPeriod
 
     @Query("select p from FinancialPeriod p where :date between p.startDate and p.endDate")
     Optional<FinancialPeriod> findByDateWithinRange(@Param("date") LocalDate date);
+
+    // Used by FinancialPeriodRolloverScheduler to find where to extend from — periods are
+    // expected to be contiguous, so "latest by end date" is "the one to roll forward from".
+    Optional<FinancialPeriod> findTopByOrderByEndDateDesc();
 }

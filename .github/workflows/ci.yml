@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      # docker/init-db.sql documents the same list — this mirrors it since GitHub Actions'
+      # `services:` block can't run init scripts against a Postgres container directly.
+      # POSTGRES_HOST_AUTH_METHOD=trust matches every service's application.properties,
+      # which connects with spring.datasource.password= (empty) — same as local dev.
+      - name: Start Postgres
+        run: |
+          docker run -d --name postgres -p 5432:5432 \
+            -e POSTGRES_USER=postgres -e POSTGRES_HOST_AUTH_METHOD=trust \
+            postgres:14
+          until docker exec postgres pg_isready -U postgres > /dev/null 2>&1; do sleep 1; done
+
+      - name: Create databases
+        run: |
+          for db in auth_db customer_db loans_db payment_db loan_product_db accounting_db notification_db branch_db; do
+            docker exec postgres psql -U postgres -c "CREATE DATABASE $db;"
+          done
+
+      # Password matches spring.data.redis.password=123456 in every service that uses Redis
+      # (auth-service, customer-service) — GitHub's `services:` block has no clean way to
+      # pass --requirepass to the official redis image, hence running it directly.
+      - name: Start Redis
+        run: |
+          docker run -d --name redis -p 6379:6379 redis:7 redis-server --requirepass 123456
+          until docker exec redis redis-cli -a 123456 ping > /dev/null 2>&1; do sleep 1; done
+
+      # Runs every module's tests: the new focused unit tests (JournalEntryServiceImpl,
+      # ReconciliationServiceImpl, FinancialPeriodRolloverScheduler, LoanServiceImpl) plus
+      # every service's Spring context-load smoke test. Discovery-server/api-gateway aren't
+      # started — Eureka client registration failures are non-fatal to context startup, so
+      # the context-load tests don't need a running Eureka to pass.
+      - name: Build and test
+        run: ./mvnw -B clean test

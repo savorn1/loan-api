@@ -83,4 +83,12 @@ public class LoanDisbursement extends BaseEntity {
 
     @Column(name = "void_reason")
     private String voidReason;
+
+    // accounting-service JournalEntry id created for this disbursement's approval (see
+    // LoanServiceImpl.approveDisbursement/recordTransaction) — voidDisbursement uses this
+    // to reverse that specific entry instead of just booking a local ADJUSTMENT. Null for
+    // disbursements approved before this existed, or if no accounting scheme was configured
+    // at approval time (recordTransaction only records locally in that case).
+    @Column(name = "journal_entry_id")
+    private Long journalEntryId;
 }

@@ -30,6 +30,8 @@ import com.example.loan.dto.LoanInterestResponse;
 import com.example.loan.dto.LoanPaymentDetailResponse;
 import com.example.loan.dto.LoanPaymentRequest;
 import com.example.loan.dto.LoanPaymentResponse;
+import com.example.loan.dto.LoanPayoffQuoteResponse;
+import com.example.loan.dto.LoanPayoffRequest;
 import com.example.loan.dto.LoanPenaltyRequest;
 import com.example.loan.dto.LoanPenaltyResponse;
 import com.example.loan.dto.LoanRefinanceRequest;
@@ -44,6 +46,8 @@ import com.example.loan.dto.LoanSettlementRequest;
 import com.example.loan.dto.LoanSettlementResponse;
 import com.example.loan.dto.LoanStatusHistoryResponse;
 import com.example.loan.dto.LoanTransactionResponse;
+import com.example.loan.dto.LoanWriteoffRecoveryRequest;
+import com.example.loan.dto.LoanWriteoffRecoveryResponse;
 import com.example.loan.dto.LoanWriteoffRequest;
 import com.example.loan.dto.LoanWriteoffResponse;
 import com.example.loan.dto.ScheduleInstallmentRequest;
@@ -101,6 +105,8 @@ import com.example.loan.repository.LoanScheduleRepository;
 import com.example.loan.repository.LoanSettlementRepository;
 import com.example.loan.repository.LoanStatusHistoryRepository;
 import com.example.loan.repository.LoanTransactionRepository;
+import com.example.loan.entity.LoanWriteoffRecovery;
+import com.example.loan.repository.LoanWriteoffRecoveryRepository;
 import com.example.loan.repository.LoanWriteoffRepository;
 import com.example.loan.service.LoanService;
 import com.example.loan.util.AmortizationCalculator;
@@ -117,9 +123,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -148,6 +156,7 @@ public class LoanServiceImpl implements LoanService {
     private final LoanRefinanceRepository loanRefinanceRepository;
     private final LoanSettlementRepository loanSettlementRepository;
     private final LoanWriteoffRepository loanWriteoffRepository;
+    private final LoanWriteoffRecoveryRepository loanWriteoffRecoveryRepository;
     private final LoanAdjustmentRepository loanAdjustmentRepository;
     private final LoanTransactionRepository loanTransactionRepository;
 
@@ -801,6 +810,123 @@ public class LoanServiceImpl implements LoanService {
     }
 
     @Override
+    public LoanPayoffQuoteResponse getPayoffQuote(Long id) {
+        Loan loan = findOrThrow(id);
+        if (loan.getStatus() != LoanStatus.ACTIVE) {
+            throw new AppException(HttpStatus.CONFLICT, "Payoff quotes are only available for ACTIVE loans");
+        }
+        return computePayoffQuote(loan);
+    }
+
+    @Override
+    @Transactional
+    public LoanResponse payoff(Long id, LoanPayoffRequest request) {
+        Loan loan = findOrThrow(id);
+        if (loan.getStatus() != LoanStatus.ACTIVE) {
+            throw new AppException(HttpStatus.CONFLICT, "Only ACTIVE loans can be paid off");
+        }
+        LoanPayoffQuoteResponse quote = computePayoffQuote(loan);
+        LocalDate today = LocalDate.now();
+
+        LoanPayment payment = LoanPayment.builder()
+                .loan(loan)
+                .amount(quote.getTotalPayoffAmount())
+                .paymentDate(today)
+                .method(request.getMethod())
+                .reference(request.getReference() != null ? request.getReference() : "Early payoff")
+                .build();
+        LoanPayment savedPayment = loanPaymentRepository.save(payment);
+        savedPayment.setPaymentNo(generatePaymentNo(savedPayment));
+        loanPaymentRepository.save(savedPayment);
+
+        // Pays every currently-PENDING fee/penalty in full — quote.outstandingFees/
+        // outstandingPenalties was computed from exactly the same PENDING rows a moment ago
+        // in this same transaction, so the amount-limited waterfall consumes them completely
+        // with nothing left over.
+        BigDecimal feesAndPenaltiesTotal = quote.getOutstandingFees().add(quote.getOutstandingPenalties());
+        if (feesAndPenaltiesTotal.compareTo(BigDecimal.ZERO) > 0) {
+            applyToOutstandingFeesAndPenalties(loan, feesAndPenaltiesTotal, today);
+        }
+
+        // The remaining schedule installments are moot once the loan is closing early — the
+        // payoff is one aggregate settlement of principal + accrued interest, not an
+        // installment-by-installment allocation (their original amounts assumed the loan ran
+        // to full term), so the schedule is superseded rather than allocatePayment'd through.
+        loanScheduleRepository.findByLoanIdAndStatus(id, ScheduleStatus.ACTIVE)
+                .forEach(schedule -> {
+                    schedule.setStatus(ScheduleStatus.SUPERSEDED);
+                    loanScheduleRepository.save(schedule);
+                });
+
+        LoanStatus previousStatus = loan.getStatus();
+        loan.setOutstandingBalance(BigDecimal.ZERO);
+        loan.setStatus(LoanStatus.CLOSED);
+        loan.setClosedAt(LocalDateTime.now());
+        Loan saved = loanRepository.save(loan);
+        recordStatusHistory(saved, previousStatus, LoanStatus.CLOSED, "Paid off early");
+
+        if (quote.getRemainingPrincipal().compareTo(BigDecimal.ZERO) > 0) {
+            recordTransaction(saved, TransactionType.PRINCIPAL_PAYMENT, quote.getRemainingPrincipal(), today,
+                    "LoanPayment", savedPayment.getId(), "Early payoff — remaining principal");
+        }
+        if (quote.getAccruedInterest().compareTo(BigDecimal.ZERO) > 0) {
+            recordTransaction(saved, TransactionType.INTEREST_PAYMENT, quote.getAccruedInterest(), today,
+                    "LoanPayment", savedPayment.getId(), "Early payoff — accrued interest");
+        }
+
+        CustomerResponse customer = customerClient.getById(saved.getCustomerId()).getData();
+        return toResponse(saved, customer);
+    }
+
+    // Simple daily-interest accrual on the remaining principal since the last payment (or
+    // since disbursement if there hasn't been one) — deliberately not Rule-of-78 or any other
+    // front-loaded method, which overcharges interest relative to time actually elapsed.
+    // Loan.outstandingBalance is NOT used here: it's set at disbursement to the sum of every
+    // future installment (principal and interest for the full term — see disburse()) and
+    // never discounted for interest not yet accrued, so it overstates what an early payoff
+    // should actually cost.
+    private LoanPayoffQuoteResponse computePayoffQuote(Loan loan) {
+        BigDecimal principalPaid = loanPaymentDetailRepository.findByPayment_LoanId(loan.getId()).stream()
+                .map(LoanPaymentDetail::getPrincipalAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal remainingPrincipal = loan.getPrincipal().subtract(principalPaid).max(BigDecimal.ZERO);
+
+        LocalDate accrualStart = loanPaymentRepository.findByLoanIdOrderByPaymentDateAsc(loan.getId()).stream()
+                .map(LoanPayment::getPaymentDate)
+                .max(LocalDate::compareTo)
+                .orElseGet(() -> loan.getDisbursedAt().toLocalDate());
+        LocalDate asOf = LocalDate.now();
+        long daysAccrued = Math.max(0, ChronoUnit.DAYS.between(accrualStart, asOf));
+
+        BigDecimal dailyRate = loan.getInterestRate()
+                .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP)
+                .divide(BigDecimal.valueOf(365), 10, RoundingMode.HALF_UP);
+        BigDecimal accruedInterest = remainingPrincipal.multiply(dailyRate).multiply(BigDecimal.valueOf(daysAccrued))
+                .setScale(2, RoundingMode.HALF_UP);
+
+        BigDecimal outstandingFees = loanFeeRepository.findByLoanIdOrderByChargedDateAsc(loan.getId()).stream()
+                .filter(fee -> fee.getStatus() == FeeStatus.PENDING)
+                .map(LoanFee::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal outstandingPenalties = loanPenaltyRepository.findByLoanIdOrderByAppliedDateAsc(loan.getId()).stream()
+                .filter(penalty -> penalty.getStatus() == PenaltyStatus.PENDING)
+                .map(LoanPenalty::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal total = remainingPrincipal.add(accruedInterest).add(outstandingFees).add(outstandingPenalties);
+
+        return LoanPayoffQuoteResponse.builder()
+                .loanId(loan.getId())
+                .asOfDate(asOf)
+                .remainingPrincipal(remainingPrincipal)
+                .accruedInterest(accruedInterest)
+                .outstandingFees(outstandingFees)
+                .outstandingPenalties(outstandingPenalties)
+                .totalPayoffAmount(total)
+                .build();
+    }
+
+    @Override
     public LoanInterestResponse addInterestAccrual(Long id, LoanInterestRequest request) {
         Loan loan = findOrThrow(id);
         LoanInterestAccrual accrual = LoanInterestAccrual.builder()
@@ -1221,6 +1347,69 @@ public class LoanServiceImpl implements LoanService {
         return PageResponse.of(loanWriteoffRepository.findAll(pageable).map(this::toWriteoffResponse));
     }
 
+    @Override
+    @Transactional
+    public LoanWriteoffRecoveryResponse recordWriteoffRecovery(Long id, LoanWriteoffRecoveryRequest request) {
+        Loan loan = findOrThrow(id);
+        LoanWriteoff writeoff = loanWriteoffRepository.findByLoanId(id)
+                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "No write-off recorded for this loan"));
+        if (writeoff.getStatus() != WriteoffStatus.COMPLETED) {
+            throw new AppException(HttpStatus.CONFLICT, "Recoveries can only be recorded against a COMPLETED write-off");
+        }
+
+        BigDecimal alreadyRecovered = loanWriteoffRecoveryRepository.findByWriteoffIdOrderByRecoveryDateAsc(writeoff.getId())
+                .stream()
+                .map(LoanWriteoffRecovery::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (alreadyRecovered.add(request.getAmount()).compareTo(writeoff.getAmount()) > 0) {
+            throw new AppException(HttpStatus.BAD_REQUEST,
+                    "Recovery of " + request.getAmount() + " would exceed the written-off amount of "
+                            + writeoff.getAmount() + " (" + alreadyRecovered + " already recovered)");
+        }
+
+        LoanWriteoffRecovery recovery = LoanWriteoffRecovery.builder()
+                .writeoff(writeoff)
+                .amount(request.getAmount())
+                .recoveryDate(request.getRecoveryDate())
+                .method(request.getMethod())
+                .reference(request.getReference())
+                .createdBy(currentUsername())
+                .build();
+        LoanWriteoffRecovery saved = loanWriteoffRecoveryRepository.save(recovery);
+
+        // The loan stays CLOSED — recovering a written-off debt doesn't reopen it. Recognized
+        // as RECOVERY income (see JournalTemplateSeeder's "Bad Debt Recovery" template), not a
+        // reversal of the original LOAN_WRITE_OFF entry, which stays posted as the historical
+        // record of the charge-off.
+        recordTransaction(loan, TransactionType.RECOVERY, saved.getAmount(), saved.getRecoveryDate(),
+                "LoanWriteoffRecovery", saved.getId(), "Recovery on write-off #" + writeoff.getId());
+
+        return toWriteoffRecoveryResponse(saved);
+    }
+
+    @Override
+    public List<LoanWriteoffRecoveryResponse> getWriteoffRecoveries(Long id) {
+        findOrThrow(id);
+        LoanWriteoff writeoff = loanWriteoffRepository.findByLoanId(id)
+                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "No write-off recorded for this loan"));
+        return loanWriteoffRecoveryRepository.findByWriteoffIdOrderByRecoveryDateAsc(writeoff.getId()).stream()
+                .map(this::toWriteoffRecoveryResponse)
+                .toList();
+    }
+
+    private LoanWriteoffRecoveryResponse toWriteoffRecoveryResponse(LoanWriteoffRecovery recovery) {
+        return LoanWriteoffRecoveryResponse.builder()
+                .id(recovery.getId())
+                .writeoffId(recovery.getWriteoff().getId())
+                .loanId(recovery.getWriteoff().getLoan().getId())
+                .amount(recovery.getAmount())
+                .recoveryDate(recovery.getRecoveryDate())
+                .method(recovery.getMethod())
+                .reference(recovery.getReference())
+                .createdAt(recovery.getCreatedAt())
+                .build();
+    }
+
     // Shared by settlement/write-off completion: zeroes the balance and
     // closes the loan, regardless of settlementAmount/writeoff amount — a
     // negotiated or uncollectable payoff still means nothing more is owed.
@@ -1345,6 +1534,7 @@ public class LoanServiceImpl implements LoanService {
             case PENALTY_PAYMENT -> "PENALTY_CHARGE";
             case FEE_PAYMENT -> "FEE_CHARGE";
             case WRITE_OFF -> "LOAN_WRITE_OFF";
+            case RECOVERY -> "RECOVERY";
             case ADJUSTMENT, SETTLEMENT -> null;
         };
     }

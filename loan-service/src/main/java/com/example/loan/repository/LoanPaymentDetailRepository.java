@@ -10,4 +10,8 @@ public interface LoanPaymentDetailRepository extends JpaRepository<LoanPaymentDe
     List<LoanPaymentDetail> findByPaymentIdOrderByIdAsc(Long paymentId);
 
     List<LoanPaymentDetail> findByScheduleInstallmentId(Long scheduleInstallmentId);
+
+    // Navigates LoanPaymentDetail.payment.loan.id — used by the payoff quote calc to sum
+    // principal paid so far across every payment on the loan, not just one.
+    List<LoanPaymentDetail> findByPayment_LoanId(Long loanId);
 }

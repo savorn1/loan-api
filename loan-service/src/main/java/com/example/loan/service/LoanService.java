@@ -22,6 +22,8 @@ import com.example.loan.dto.LoanInterestRequest;
 import com.example.loan.dto.LoanInterestResponse;
 import com.example.loan.dto.LoanPaymentRequest;
 import com.example.loan.dto.LoanPaymentResponse;
+import com.example.loan.dto.LoanPayoffQuoteResponse;
+import com.example.loan.dto.LoanPayoffRequest;
 import com.example.loan.dto.LoanPenaltyRequest;
 import com.example.loan.dto.LoanPenaltyResponse;
 import com.example.loan.dto.LoanRefinanceRequest;
@@ -36,6 +38,8 @@ import com.example.loan.dto.LoanSettlementRequest;
 import com.example.loan.dto.LoanSettlementResponse;
 import com.example.loan.dto.LoanStatusHistoryResponse;
 import com.example.loan.dto.LoanTransactionResponse;
+import com.example.loan.dto.LoanWriteoffRecoveryRequest;
+import com.example.loan.dto.LoanWriteoffRecoveryResponse;
 import com.example.loan.dto.LoanWriteoffRequest;
 import com.example.loan.dto.LoanWriteoffResponse;
 
@@ -124,6 +128,10 @@ public interface LoanService {
 
     List<LoanPaymentResponse> getPayments(Long id);
 
+    LoanPayoffQuoteResponse getPayoffQuote(Long id);
+
+    LoanResponse payoff(Long id, LoanPayoffRequest request);
+
     LoanInterestResponse addInterestAccrual(Long id, LoanInterestRequest request);
 
     List<LoanInterestResponse> getInterestAccruals(Long id);
@@ -185,6 +193,10 @@ public interface LoanService {
     LoanWriteoffResponse completeWriteoff(Long id);
 
     PageResponse<LoanWriteoffResponse> getAllWriteoffs(int page, int size, String sortBy, String sortOrder);
+
+    LoanWriteoffRecoveryResponse recordWriteoffRecovery(Long id, LoanWriteoffRecoveryRequest request);
+
+    List<LoanWriteoffRecoveryResponse> getWriteoffRecoveries(Long id);
 
     LoanAdjustmentResponse addAdjustment(Long id, LoanAdjustmentRequest request);
 

@@ -10,6 +10,12 @@ import com.example.loan.dto.JournalEntryGenerateRequest;
 import com.example.loan.dto.JournalEntryResponse;
 import com.example.loan.dto.LoanRefinanceRequest;
 import com.example.loan.dto.LoanResponse;
+import com.example.loan.dto.LoanPayoffQuoteResponse;
+import com.example.loan.dto.LoanPayoffRequest;
+import com.example.loan.dto.LoanWriteoffRecoveryRequest;
+import com.example.loan.entity.LoanWriteoff;
+import com.example.loan.entity.WriteoffStatus;
+import com.example.loan.entity.DisbursementMethod;
 import com.example.loan.entity.FeeStatus;
 import com.example.loan.entity.Loan;
 import com.example.loan.entity.LoanFee;
@@ -89,6 +95,7 @@ class LoanServiceImplTest {
     @Mock private LoanRefinanceRepository loanRefinanceRepository;
     @Mock private com.example.loan.repository.LoanSettlementRepository loanSettlementRepository;
     @Mock private com.example.loan.repository.LoanWriteoffRepository loanWriteoffRepository;
+    @Mock private com.example.loan.repository.LoanWriteoffRecoveryRepository loanWriteoffRecoveryRepository;
     @Mock private com.example.loan.repository.LoanAdjustmentRepository loanAdjustmentRepository;
     @Mock private LoanTransactionRepository loanTransactionRepository;
 
@@ -103,8 +110,8 @@ class LoanServiceImplTest {
                 loanCollateralRepository, loanDocumentRepository, loanNoteRepository, loanScheduleRepository,
                 loanScheduleInstallmentRepository, loanPaymentRepository, loanPaymentDetailRepository,
                 loanInterestAccrualRepository, loanPenaltyRepository, loanFeeRepository, loanRestructureRepository,
-                loanRefinanceRepository, loanSettlementRepository, loanWriteoffRepository, loanAdjustmentRepository,
-                loanTransactionRepository);
+                loanRefinanceRepository, loanSettlementRepository, loanWriteoffRepository,
+                loanWriteoffRecoveryRepository, loanAdjustmentRepository, loanTransactionRepository);
 
         activeLoan = Loan.builder()
                 .customerId(4L)
@@ -341,5 +348,205 @@ class LoanServiceImplTest {
         verify(accountingClient).generate(captor.capture());
         assertThat(captor.getValue().getTransactionType()).isEqualTo("PENALTY_CHARGE");
         assertThat(captor.getValue().getAmount()).isEqualByComparingTo("12.00");
+    }
+
+    // ── payoff quote: must be less than outstandingBalance for an early payoff ─────────
+
+    @Test
+    void getPayoffQuote_accruesSimpleDailyInterestSinceDisbursementWhenNoPaymentsYet() {
+        activeLoan.setPrincipal(new BigDecimal("1000.00"));
+        activeLoan.setInterestRate(new BigDecimal("12.00"));
+        activeLoan.setDisbursedAt(LocalDateTime.now().minusDays(30));
+        // Fixture's default outstandingBalance (977.30) is leftover from other tests'
+        // scenarios — set it here to what disburse() actually sets it to: principal plus
+        // every future installment's interest for the full term (see disburse()), which for
+        // a fresh 1000/12%/12mo loan is well above 1000 and is exactly the number a 30-day-old
+        // payoff should undercut.
+        activeLoan.setOutstandingBalance(new BigDecimal("1065.00"));
+        when(loanRepository.findById(7L)).thenReturn(Optional.of(activeLoan));
+        when(loanPaymentDetailRepository.findByPayment_LoanId(7L)).thenReturn(List.of());
+        when(loanPaymentRepository.findByLoanIdOrderByPaymentDateAsc(7L)).thenReturn(List.of());
+        when(loanFeeRepository.findByLoanIdOrderByChargedDateAsc(7L)).thenReturn(List.of());
+        when(loanPenaltyRepository.findByLoanIdOrderByAppliedDateAsc(7L)).thenReturn(List.of());
+
+        LoanPayoffQuoteResponse quote = service.getPayoffQuote(7L);
+
+        long daysAccrued = java.time.temporal.ChronoUnit.DAYS.between(
+                activeLoan.getDisbursedAt().toLocalDate(), LocalDate.now());
+        BigDecimal dailyRate = new BigDecimal("12.00")
+                .divide(BigDecimal.valueOf(100), 10, java.math.RoundingMode.HALF_UP)
+                .divide(BigDecimal.valueOf(365), 10, java.math.RoundingMode.HALF_UP);
+        BigDecimal expectedInterest = new BigDecimal("1000.00").multiply(dailyRate)
+                .multiply(BigDecimal.valueOf(daysAccrued)).setScale(2, java.math.RoundingMode.HALF_UP);
+
+        assertThat(quote.getRemainingPrincipal()).isEqualByComparingTo("1000.00");
+        assertThat(quote.getAccruedInterest()).isEqualByComparingTo(expectedInterest);
+        // The whole point: this must be less than what outstandingBalance would charge (which
+        // bakes in a full 12 months of interest regardless of a 30-day-old loan).
+        assertThat(quote.getTotalPayoffAmount()).isLessThan(activeLoan.getOutstandingBalance());
+    }
+
+    @Test
+    void getPayoffQuote_subtractsPrincipalAlreadyPaidAndIncludesPendingFeesAndPenalties() {
+        activeLoan.setPrincipal(new BigDecimal("1000.00"));
+        activeLoan.setDisbursedAt(LocalDateTime.now().minusDays(10));
+        when(loanRepository.findById(7L)).thenReturn(Optional.of(activeLoan));
+
+        var alreadyPaidDetail = com.example.loan.entity.LoanPaymentDetail.builder()
+                .principalAmount(new BigDecimal("200.00")).interestAmount(new BigDecimal("5.00")).build();
+        when(loanPaymentDetailRepository.findByPayment_LoanId(7L)).thenReturn(List.of(alreadyPaidDetail));
+        when(loanPaymentRepository.findByLoanIdOrderByPaymentDateAsc(7L)).thenReturn(List.of());
+
+        LoanFee pendingFee = LoanFee.builder().amount(new BigDecimal("15.00")).status(FeeStatus.PENDING).build();
+        LoanFee paidFee = LoanFee.builder().amount(new BigDecimal("999.00")).status(FeeStatus.PAID).build();
+        when(loanFeeRepository.findByLoanIdOrderByChargedDateAsc(7L)).thenReturn(List.of(pendingFee, paidFee));
+
+        LoanPenalty pendingPenalty = LoanPenalty.builder().amount(new BigDecimal("8.00")).status(PenaltyStatus.PENDING).build();
+        when(loanPenaltyRepository.findByLoanIdOrderByAppliedDateAsc(7L)).thenReturn(List.of(pendingPenalty));
+
+        LoanPayoffQuoteResponse quote = service.getPayoffQuote(7L);
+
+        assertThat(quote.getRemainingPrincipal()).isEqualByComparingTo("800.00");
+        assertThat(quote.getOutstandingFees()).isEqualByComparingTo("15.00");
+        assertThat(quote.getOutstandingPenalties()).isEqualByComparingTo("8.00");
+    }
+
+    @Test
+    void getPayoffQuote_rejectsNonActiveLoan() {
+        Loan closed = Loan.builder().status(LoanStatus.CLOSED).build();
+        closed.setId(9L);
+        when(loanRepository.findById(9L)).thenReturn(Optional.of(closed));
+
+        assertThatThrownBy(() -> service.getPayoffQuote(9L)).isInstanceOf(AppException.class);
+    }
+
+    @Test
+    void payoff_closesLoanAndSupersedesScheduleAndPostsPrincipalAndInterest() {
+        activeLoan.setPrincipal(new BigDecimal("1000.00"));
+        activeLoan.setInterestRate(new BigDecimal("12.00"));
+        activeLoan.setDisbursedAt(LocalDateTime.now().minusDays(30));
+        when(loanRepository.findById(7L)).thenReturn(Optional.of(activeLoan));
+        when(loanPaymentDetailRepository.findByPayment_LoanId(7L)).thenReturn(List.of());
+        when(loanPaymentRepository.findByLoanIdOrderByPaymentDateAsc(7L)).thenReturn(List.of());
+        when(loanFeeRepository.findByLoanIdOrderByChargedDateAsc(7L)).thenReturn(List.of());
+        when(loanPenaltyRepository.findByLoanIdOrderByAppliedDateAsc(7L)).thenReturn(List.of());
+
+        AtomicLong paymentId = new AtomicLong(1);
+        when(loanPaymentRepository.save(any(LoanPayment.class))).thenAnswer(inv -> {
+            LoanPayment p = inv.getArgument(0);
+            if (p.getId() == null) {
+                p.setId(paymentId.getAndIncrement());
+                p.setCreatedAt(LocalDateTime.now());
+            }
+            return p;
+        });
+
+        LoanSchedule active = LoanSchedule.builder().loan(activeLoan).status(ScheduleStatus.ACTIVE).build();
+        active.setId(1L);
+        when(loanScheduleRepository.findByLoanIdAndStatus(7L, ScheduleStatus.ACTIVE)).thenReturn(List.of(active));
+        when(loanScheduleRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        LoanPayoffRequest request = new LoanPayoffRequest();
+        request.setMethod(DisbursementMethod.BANK_TRANSFER);
+
+        LoanResponse response = service.payoff(7L, request);
+
+        assertThat(response.getStatus()).isEqualTo(LoanStatus.CLOSED);
+        assertThat(response.getOutstandingBalance()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(active.getStatus()).isEqualTo(ScheduleStatus.SUPERSEDED);
+
+        ArgumentCaptor<JournalEntryGenerateRequest> captor = ArgumentCaptor.forClass(JournalEntryGenerateRequest.class);
+        verify(accountingClient, times(2)).generate(captor.capture());
+        assertThat(captor.getAllValues()).anySatisfy(r -> {
+            assertThat(r.getTransactionType()).isEqualTo("PRINCIPAL_PAYMENT");
+            assertThat(r.getAmount()).isEqualByComparingTo("1000.00");
+        });
+        assertThat(captor.getAllValues()).anySatisfy(r -> assertThat(r.getTransactionType()).isEqualTo("INTEREST_PAYMENT"));
+    }
+
+    // ── write-off recovery: doesn't reopen the loan, doesn't exceed the written-off amount ──
+
+    @Test
+    void recordWriteoffRecovery_postsRecoveryIncomeWithoutReopeningTheLoan() {
+        Loan closedLoan = Loan.builder().status(LoanStatus.CLOSED).build();
+        closedLoan.setId(7L);
+        when(loanRepository.findById(7L)).thenReturn(Optional.of(closedLoan));
+
+        LoanWriteoff writeoff = LoanWriteoff.builder()
+                .loan(closedLoan).amount(new BigDecimal("500.00"))
+                .reason("Uncollectable").writeoffDate(LocalDate.of(2026, 1, 1))
+                .status(WriteoffStatus.COMPLETED).build();
+        writeoff.setId(4L);
+        when(loanWriteoffRepository.findByLoanId(7L)).thenReturn(Optional.of(writeoff));
+        when(loanWriteoffRecoveryRepository.findByWriteoffIdOrderByRecoveryDateAsc(4L)).thenReturn(List.of());
+        when(loanWriteoffRecoveryRepository.save(any())).thenAnswer(inv -> {
+            var r = (com.example.loan.entity.LoanWriteoffRecovery) inv.getArgument(0);
+            r.setId(1L);
+            return r;
+        });
+
+        LoanWriteoffRecoveryRequest request = new LoanWriteoffRecoveryRequest();
+        request.setAmount(new BigDecimal("200.00"));
+        request.setRecoveryDate(LocalDate.of(2026, 8, 8));
+        request.setMethod(DisbursementMethod.CASH);
+
+        service.recordWriteoffRecovery(7L, request);
+
+        // Recovering a written-off debt doesn't reactivate the loan.
+        assertThat(closedLoan.getStatus()).isEqualTo(LoanStatus.CLOSED);
+
+        ArgumentCaptor<JournalEntryGenerateRequest> captor = ArgumentCaptor.forClass(JournalEntryGenerateRequest.class);
+        verify(accountingClient).generate(captor.capture());
+        assertThat(captor.getValue().getTransactionType()).isEqualTo("RECOVERY");
+        assertThat(captor.getValue().getAmount()).isEqualByComparingTo("200.00");
+    }
+
+    @Test
+    void recordWriteoffRecovery_rejectsAmountExceedingWhatWasWrittenOff() {
+        Loan closedLoan = Loan.builder().status(LoanStatus.CLOSED).build();
+        closedLoan.setId(7L);
+        when(loanRepository.findById(7L)).thenReturn(Optional.of(closedLoan));
+
+        LoanWriteoff writeoff = LoanWriteoff.builder()
+                .loan(closedLoan).amount(new BigDecimal("500.00"))
+                .reason("Uncollectable").writeoffDate(LocalDate.of(2026, 1, 1))
+                .status(WriteoffStatus.COMPLETED).build();
+        writeoff.setId(4L);
+        when(loanWriteoffRepository.findByLoanId(7L)).thenReturn(Optional.of(writeoff));
+
+        // 300 already recovered + a new 250 request would total 550, exceeding the 500 written off.
+        var existingRecovery = com.example.loan.entity.LoanWriteoffRecovery.builder()
+                .amount(new BigDecimal("300.00")).build();
+        when(loanWriteoffRecoveryRepository.findByWriteoffIdOrderByRecoveryDateAsc(4L))
+                .thenReturn(List.of(existingRecovery));
+
+        LoanWriteoffRecoveryRequest request = new LoanWriteoffRecoveryRequest();
+        request.setAmount(new BigDecimal("250.00"));
+        request.setRecoveryDate(LocalDate.of(2026, 8, 8));
+        request.setMethod(DisbursementMethod.CASH);
+
+        assertThatThrownBy(() -> service.recordWriteoffRecovery(7L, request)).isInstanceOf(AppException.class);
+        verify(loanWriteoffRecoveryRepository, never()).save(any());
+    }
+
+    @Test
+    void recordWriteoffRecovery_rejectsWhenWriteoffIsStillPending() {
+        Loan closedLoan = Loan.builder().status(LoanStatus.CLOSED).build();
+        closedLoan.setId(7L);
+        when(loanRepository.findById(7L)).thenReturn(Optional.of(closedLoan));
+
+        LoanWriteoff writeoff = LoanWriteoff.builder()
+                .loan(closedLoan).amount(new BigDecimal("500.00"))
+                .reason("Uncollectable").writeoffDate(LocalDate.of(2026, 1, 1))
+                .status(WriteoffStatus.PENDING).build();
+        writeoff.setId(4L);
+        when(loanWriteoffRepository.findByLoanId(7L)).thenReturn(Optional.of(writeoff));
+
+        LoanWriteoffRecoveryRequest request = new LoanWriteoffRecoveryRequest();
+        request.setAmount(new BigDecimal("100.00"));
+        request.setRecoveryDate(LocalDate.of(2026, 8, 8));
+        request.setMethod(DisbursementMethod.CASH);
+
+        assertThatThrownBy(() -> service.recordWriteoffRecovery(7L, request)).isInstanceOf(AppException.class);
     }
 }

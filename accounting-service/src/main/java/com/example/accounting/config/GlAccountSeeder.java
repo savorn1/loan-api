@@ -78,6 +78,7 @@ public class GlAccountSeeder implements CommandLineRunner {
             new Def("4010", "Interest Income", AccountType.INCOME, EntrySide.CREDIT, "4000"),
             new Def("4020", "Fee Income", AccountType.INCOME, EntrySide.CREDIT, "4000"),
             new Def("4030", "Penalty Income", AccountType.INCOME, EntrySide.CREDIT, "4000"),
+            new Def("4040", "Bad Debt Recovery", AccountType.INCOME, EntrySide.CREDIT, "4000"),
 
             // Expenses
             new Def("5010", "Loan Write-off Expense", AccountType.EXPENSE, EntrySide.DEBIT, "5000"),

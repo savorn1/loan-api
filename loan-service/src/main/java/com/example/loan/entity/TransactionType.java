@@ -8,5 +8,6 @@ public enum TransactionType {
     FEE_PAYMENT,
     ADJUSTMENT,
     WRITE_OFF,
-    SETTLEMENT
+    SETTLEMENT,
+    RECOVERY
 }

@@ -68,7 +68,10 @@ public class JournalTemplateSeeder implements CommandLineRunner {
                     new LineDef(2, "PENALTY_INCOME", EntrySide.CREDIT, "4030", "Penalty income earned"))),
             new TemplateDef("LOAN_WRITE_OFF", "Loan Write-off", TransactionType.LOAN_WRITE_OFF, List.of(
                     new LineDef(1, "WRITEOFF_EXPENSE", EntrySide.DEBIT, "5010", "Write-off expense recognized"),
-                    new LineDef(2, "LOAN_RECEIVABLE", EntrySide.CREDIT, "1100", "Uncollectible principal removed")))
+                    new LineDef(2, "LOAN_RECEIVABLE", EntrySide.CREDIT, "1100", "Uncollectible principal removed"))),
+            new TemplateDef("RECOVERY", "Bad Debt Recovery", TransactionType.RECOVERY, List.of(
+                    new LineDef(1, "CASH", EntrySide.DEBIT, "1010", "Cash recovered on a written-off loan"),
+                    new LineDef(2, "RECOVERY_INCOME", EntrySide.CREDIT, "4040", "Bad debt recovery income")))
     );
 
     @Override

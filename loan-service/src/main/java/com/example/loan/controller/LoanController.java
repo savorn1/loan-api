@@ -23,6 +23,8 @@ import com.example.loan.dto.LoanInterestRequest;
 import com.example.loan.dto.LoanInterestResponse;
 import com.example.loan.dto.LoanPaymentRequest;
 import com.example.loan.dto.LoanPaymentResponse;
+import com.example.loan.dto.LoanPayoffQuoteResponse;
+import com.example.loan.dto.LoanPayoffRequest;
 import com.example.loan.dto.LoanPenaltyRequest;
 import com.example.loan.dto.LoanPenaltyResponse;
 import com.example.loan.dto.LoanRefinanceRequest;
@@ -37,6 +39,8 @@ import com.example.loan.dto.LoanSettlementRequest;
 import com.example.loan.dto.LoanSettlementResponse;
 import com.example.loan.dto.LoanStatusHistoryResponse;
 import com.example.loan.dto.LoanTransactionResponse;
+import com.example.loan.dto.LoanWriteoffRecoveryRequest;
+import com.example.loan.dto.LoanWriteoffRecoveryResponse;
 import com.example.loan.dto.LoanWriteoffRequest;
 import com.example.loan.dto.LoanWriteoffResponse;
 import com.example.loan.service.LoanService;
@@ -329,6 +333,20 @@ public class LoanController {
                 .body(ApiResponse.success("Payment recorded", loanService.addPayment(id, request)));
     }
 
+    // What it actually costs to close this loan today — see LoanServiceImpl.computePayoffQuote
+    // for why this differs from (is lower than) the loan's outstandingBalance.
+    @GetMapping("/{id}/payoff-quote")
+    public ResponseEntity<ApiResponse<LoanPayoffQuoteResponse>> getPayoffQuote(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.success(loanService.getPayoffQuote(id)));
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @PostMapping("/{id}/payoff")
+    public ResponseEntity<ApiResponse<LoanResponse>> payoff(
+            @PathVariable Long id, @Valid @RequestBody LoanPayoffRequest request) {
+        return ResponseEntity.ok(ApiResponse.success("Loan paid off", loanService.payoff(id, request)));
+    }
+
     @GetMapping("/{id}/interest")
     public ResponseEntity<ApiResponse<List<LoanInterestResponse>>> getInterestAccruals(@PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.success(loanService.getInterestAccruals(id)));
@@ -551,6 +569,19 @@ public class LoanController {
             @RequestParam(defaultValue = "createdAt") String sortBy,
             @RequestParam(defaultValue = "desc") String sortOrder) {
         return ResponseEntity.ok(loanService.getAllWriteoffs(page, size, sortBy, sortOrder));
+    }
+
+    @GetMapping("/{id}/writeoff/recoveries")
+    public ResponseEntity<ApiResponse<List<LoanWriteoffRecoveryResponse>>> getWriteoffRecoveries(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.success(loanService.getWriteoffRecoveries(id)));
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @PostMapping("/{id}/writeoff/recoveries")
+    public ResponseEntity<ApiResponse<LoanWriteoffRecoveryResponse>> recordWriteoffRecovery(
+            @PathVariable Long id, @Valid @RequestBody LoanWriteoffRecoveryRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Recovery recorded", loanService.recordWriteoffRecovery(id, request)));
     }
 
     @GetMapping("/{id}/adjustments")

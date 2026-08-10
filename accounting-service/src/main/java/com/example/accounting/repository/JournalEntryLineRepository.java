@@ -1,6 +1,7 @@
 package com.example.accounting.repository;
 
 import com.example.accounting.dto.AccountSideTotal;
+import com.example.accounting.dto.BranchAccountTypeTotal;
 import com.example.accounting.entity.JournalEntryLine;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -53,5 +54,15 @@ public interface JournalEntryLineRepository extends JpaRepository<JournalEntryLi
             "order by l.journalEntry.transactionDate asc, l.lineNo asc")
     List<JournalEntryLine> findPostedLinesForBranchAndDateRange(@Param("branchId") Long branchId,
                                                                    @Param("dateFrom") LocalDate dateFrom,
+                                                                   @Param("dateTo") LocalDate dateTo);
+
+    @Query("select new com.example.accounting.dto.BranchAccountTypeTotal(l.journalEntry.branchId, ga.accountType, l.entrySide, sum(l.amount)) " +
+            "from JournalEntryLine l join l.glAccount ga " +
+            "where l.journalEntry.status = com.example.accounting.entity.JournalEntryStatus.POSTED " +
+            "and ga.accountType in (com.example.accounting.entity.AccountType.INCOME, com.example.accounting.entity.AccountType.EXPENSE) " +
+            "and (cast(:dateFrom as date) is null or l.journalEntry.transactionDate >= :dateFrom) " +
+            "and (cast(:dateTo as date) is null or l.journalEntry.transactionDate <= :dateTo) " +
+            "group by l.journalEntry.branchId, ga.accountType, l.entrySide")
+    List<BranchAccountTypeTotal> aggregateIncomeExpenseByBranch(@Param("dateFrom") LocalDate dateFrom,
                                                                    @Param("dateTo") LocalDate dateTo);
 }

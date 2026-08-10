@@ -114,6 +114,11 @@ spring:
               predicates:
                 - Path=/api/reports/**
 
+            - id: accounting-service-budgets
+              uri: lb://accounting-service
+              predicates:
+                - Path=/api/budgets/**
+
             - id: notification-service
               uri: lb://notification-service
               predicates:

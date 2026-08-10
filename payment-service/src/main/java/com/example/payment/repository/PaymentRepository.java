@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -19,6 +20,11 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     List<Payment> findByDueDateBeforeAndStatus(LocalDate date, PaymentStatus status);
 
     List<Payment> findByDueDateAndStatus(LocalDate date, PaymentStatus status);
+
+    List<Payment> findByStatusAndAmountGreaterThanEqualAndPaidAtGreaterThanEqualOrderByAmountDesc(
+            PaymentStatus status, BigDecimal amount, LocalDate paidAt);
+
+    List<Payment> findByStatusAndPaidAtGreaterThanEqual(PaymentStatus status, LocalDate paidAt);
 
     // See loan-service's LoanRepository.aggregateDisbursementTrend for why the
     // cast is required (function()'s return type is otherwise unresolved,

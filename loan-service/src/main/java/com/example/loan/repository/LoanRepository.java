@@ -1,6 +1,10 @@
 package com.example.loan.repository;
 
+import com.example.loan.dto.BranchOutstandingRow;
+import com.example.loan.dto.CohortStatusRow;
+import com.example.loan.dto.CustomerOutstandingRow;
 import com.example.loan.dto.DisbursementTrendPointResponse;
+import com.example.loan.dto.LoanPricingRow;
 import com.example.loan.dto.LoanStatusBreakdownResponse;
 import com.example.loan.dto.PortfolioSummaryResponse;
 import com.example.loan.entity.Loan;
@@ -38,4 +42,30 @@ public interface LoanRepository extends JpaRepository<Loan, Long>, JpaSpecificat
     @Query("select new com.example.loan.dto.LoanStatusBreakdownResponse(l.status, count(l), sum(l.principal)) " +
             "from Loan l group by l.status")
     List<LoanStatusBreakdownResponse> aggregateStatusBreakdown();
+
+    // disbursedAt is only set once a loan is actually disbursed (ACTIVE/CLOSED) —
+    // PENDING/APPROVED/REJECTED loans never appear in a cohort, same reasoning as
+    // aggregateDisbursementTrend.
+    @Query("select new com.example.loan.dto.CohortStatusRow(cast(function('to_char', l.disbursedAt, 'YYYY-MM') as string), l.status, count(l), sum(l.principal)) " +
+            "from Loan l where l.disbursedAt is not null and l.disbursedAt >= :since " +
+            "group by function('to_char', l.disbursedAt, 'YYYY-MM'), l.status " +
+            "order by function('to_char', l.disbursedAt, 'YYYY-MM')")
+    List<CohortStatusRow> aggregateVintageCohorts(@Param("since") LocalDateTime since);
+
+    @Query("select new com.example.loan.dto.BranchOutstandingRow(l.branchId, count(l), sum(l.outstandingBalance)) " +
+            "from Loan l where l.status = com.example.loan.entity.LoanStatus.ACTIVE " +
+            "group by l.branchId order by sum(l.outstandingBalance) desc")
+    List<BranchOutstandingRow> aggregateOutstandingByBranch();
+
+    @Query("select new com.example.loan.dto.CustomerOutstandingRow(l.customerId, count(l), sum(l.outstandingBalance)) " +
+            "from Loan l where l.status = com.example.loan.entity.LoanStatus.ACTIVE " +
+            "group by l.customerId order by sum(l.outstandingBalance) desc")
+    List<CustomerOutstandingRow> aggregateOutstandingByCustomer();
+
+    // Pricing report only needs loans that were actually priced and disbursed —
+    // ACTIVE/CLOSED, same population as the vintage report.
+    @Query("select new com.example.loan.dto.LoanPricingRow(l.interestRate, l.principal, l.termMonths) " +
+            "from Loan l where l.status = com.example.loan.entity.LoanStatus.ACTIVE " +
+            "or l.status = com.example.loan.entity.LoanStatus.CLOSED")
+    List<LoanPricingRow> findPricingProjection();
 }

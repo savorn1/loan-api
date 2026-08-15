@@ -31,8 +31,13 @@ public class Application extends BaseEntity {
     private Long id;
 
     // Assigned after the initial save, once the id is known — same two-phase-save
-    // pattern as Loan.loanNo. Nullable because ddl-auto=update can't add a NOT
-    // NULL column to a table that already has rows.
+    // pattern as Loan.loanNo. updatable=false is deliberate (this is a system-issued
+    // reference number, immutable once set) but it also means a plain entity save()
+    // can never write it after the row exists, since Hibernate excludes non-updatable
+    // columns from generated UPDATE statements — see ApplicationRepository.updateApplicationNo,
+    // a bulk JPQL update, which is the only way around that. Nullable because
+    // ddl-auto=update can't add a NOT NULL column to a table that already has rows;
+    // ApplicationNoBackfill fills in rows that predate this column.
     @Column(unique = true, updatable = false)
     private String applicationNo;
 

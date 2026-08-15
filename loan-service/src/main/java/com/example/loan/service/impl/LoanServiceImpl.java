@@ -174,8 +174,9 @@ public class LoanServiceImpl implements LoanService {
                 .build();
 
         Loan saved = loanRepository.save(loan);
-        saved.setLoanNo(generateLoanNo(saved));
-        saved = loanRepository.save(saved);
+        String loanNo = generateLoanNo(saved);
+        loanRepository.updateLoanNo(saved.getId(), loanNo);
+        saved.setLoanNo(loanNo);
         recordStatusHistory(saved, null, LoanStatus.PENDING, null);
         return toResponse(saved, customer);
     }

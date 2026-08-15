@@ -32,10 +32,13 @@ public class Loan extends BaseEntity {
     private Long id;
 
     // Assigned after the initial save, once the id is known — same two-phase-save
-    // pattern as customer-service's Customer.customerNo. Nullable (unlike
-    // customerNo) because ddl-auto=update can't add a NOT NULL column to a
-    // table that already has rows; existing loans need a backfill before this
-    // can be tightened to nullable=false.
+    // pattern as customer-service's Customer.customerNo. updatable=false is deliberate
+    // (immutable once set) but it also means a plain entity save() can never write it
+    // after the row exists, since Hibernate excludes non-updatable columns from
+    // generated UPDATE statements — see LoanRepository.updateLoanNo, a bulk JPQL
+    // update, which is the only way around that. Nullable (unlike customerNo) because
+    // ddl-auto=update can't add a NOT NULL column to a table that already has rows;
+    // LoanNoBackfill fills in rows that predate this fix.
     @Column(unique = true, updatable = false)
     private String loanNo;
 

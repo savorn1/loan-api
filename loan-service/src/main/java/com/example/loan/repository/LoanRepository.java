@@ -11,6 +11,7 @@ import com.example.loan.entity.Loan;
 import com.example.loan.entity.LoanStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -22,6 +23,15 @@ public interface LoanRepository extends JpaRepository<Loan, Long>, JpaSpecificat
     List<Loan> findByCustomerId(Long customerId);
 
     List<Loan> findByStatus(LoanStatus status);
+
+    List<Loan> findByLoanNoIsNull();
+
+    // loanNo is @Column(updatable = false) so a normal entity save() silently excludes
+    // it from the generated UPDATE — a bulk JPQL update bypasses that mapping
+    // restriction, which is the only way to write it after the row already exists.
+    @Modifying
+    @Query("UPDATE Loan l SET l.loanNo = :loanNo WHERE l.id = :id")
+    void updateLoanNo(@Param("id") Long id, @Param("loanNo") String loanNo);
 
     // COUNT/SUM with no GROUP BY always returns exactly one row (sums null
     // when there are zero matches) — safe as a singular (non-List) result.

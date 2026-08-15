@@ -72,8 +72,9 @@ public class ApplicationServiceImpl implements ApplicationService {
                 .build();
 
         application = applicationRepository.save(application);
-        application.setApplicationNo(generateApplicationNo(application));
-        application = applicationRepository.save(application);
+        String applicationNo = generateApplicationNo(application);
+        applicationRepository.updateApplicationNo(application.getId(), applicationNo);
+        application.setApplicationNo(applicationNo);
 
         return toResponse(application, customer);
     }

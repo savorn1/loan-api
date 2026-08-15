@@ -12,6 +12,7 @@ import java.util.List;
 public class GroupLoanApplicationResponse {
 
     private Long id;
+    private String applicationNo;
     private Long groupId;
     private String groupName;
     private Long branchId;

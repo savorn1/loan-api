@@ -1,6 +1,7 @@
 package com.example.auth.service.impl;
 
 import com.example.auth.client.BranchClient;
+import com.example.auth.dto.BranchResponse;
 import com.example.auth.dto.CreateUserRequest;
 import com.example.auth.dto.PageResponse;
 import com.example.auth.dto.UpdateBranchRequest;
@@ -28,7 +29,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -71,7 +75,9 @@ public class UserServiceImpl implements UserService {
                 : Sort.by(filter.getSortBy()).descending();
         Pageable pageable = PageRequest.of(Math.max(filter.getPage() - 1, 0), filter.getSize(), sort);
 
-        Page<UserResponse> page = userRepository.findAll(spec, pageable).map(this::toResponse);
+        Page<SysUser> users = userRepository.findAll(spec, pageable);
+        Map<Long, String> branchNames = fetchBranchNames();
+        Page<UserResponse> page = users.map(user -> toResponse(user, branchNames));
         return PageResponse.of(page);
     }
 
@@ -161,7 +167,8 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public List<UserResponse> getUsersByIds(List<Long> ids) {
-        return userRepository.findAllById(ids).stream().map(this::toResponse).toList();
+        Map<Long, String> branchNames = fetchBranchNames();
+        return userRepository.findAllById(ids).stream().map(user -> toResponse(user, branchNames)).toList();
     }
 
     @Override
@@ -215,10 +222,9 @@ public class UserServiceImpl implements UserService {
         }
     }
 
-    // Best-effort display-name lookup — called per row when listing users (same N+1
-    // Feign-call-per-row pattern loan-service already uses for customerName). Soft-fails
-    // to null rather than breaking the whole list if branch-service is down or the
-    // referenced branch was since deleted.
+    // Best-effort single-id lookup — used by single-record responses (getUser,
+    // createUser, updateRole/Status/Branch). Soft-fails to null rather than breaking
+    // the response if branch-service is down or the referenced branch was since deleted.
     private String resolveBranchName(Long branchId) {
         if (branchId == null) {
             return null;
@@ -231,7 +237,26 @@ public class UserServiceImpl implements UserService {
         }
     }
 
+    // Batch lookup for list responses (listUsers, getUsersByIds) — one call to fetch
+    // every branch instead of one getById call per row.
+    private Map<Long, String> fetchBranchNames() {
+        try {
+            return branchClient.list().getData().stream()
+                    .collect(Collectors.toMap(BranchResponse::getId, BranchResponse::getName));
+        } catch (Exception e) {
+            log.warn("Could not resolve branch names: {}", e.getMessage());
+            return Collections.emptyMap();
+        }
+    }
+
     private UserResponse toResponse(SysUser user) {
+        return toResponse(user, null);
+    }
+
+    private UserResponse toResponse(SysUser user, Map<Long, String> branchNames) {
+        String branchName = branchNames != null
+                ? branchNames.get(user.getBranchId())
+                : resolveBranchName(user.getBranchId());
         return UserResponse.builder()
                 .id(user.getId())
                 .uuid(user.getUuid().toString())
@@ -241,7 +266,7 @@ public class UserServiceImpl implements UserService {
                 .role(user.getRole().name())
                 .status(user.getStatus().name())
                 .branchId(user.getBranchId())
-                .branchName(resolveBranchName(user.getBranchId()))
+                .branchName(branchName)
                 .createdAt(user.getCreatedAt())
                 .updatedAt(user.getUpdatedAt())
                 .build();

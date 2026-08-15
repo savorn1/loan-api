@@ -32,6 +32,15 @@ public class GroupLoanApplication extends BaseEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    // Assigned right after the initial save via GroupLoanApplicationRepository.updateApplicationNo
+    // (a bulk JPQL update) rather than a second save() — see the comment on
+    // Application.applicationNo for why a normal entity save() can't write an
+    // updatable=false column once the row exists. Nullable because ddl-auto=update
+    // can't add a NOT NULL column to a table that already has rows; GroupLoanApplicationNoBackfill
+    // fills in rows that predate this column.
+    @Column(unique = true, updatable = false)
+    private String applicationNo;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "group_id", nullable = false)
     private Group group;

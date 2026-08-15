@@ -193,12 +193,11 @@ eureka:
   instance:
     prefer-ip-address: true
 
-# Shared JWT secret — must match the value in auth-service. Reads JWT_SECRET if set
-# (docker-compose.yml/docker-compose.prod.yml), falling back to this default otherwise —
-# every other service's jwt.secret follows the same ${JWT_SECRET:default} pattern, so
-# setting the env var once actually rotates it everywhere instead of needing 9 file edits.
+# Shared JWT secret — must match the value in auth-service. No default: an unset
+# JWT_SECRET must fail startup rather than silently fall back to a value that's
+# sitting in git history.
 jwt:
-  secret: ${JWT_SECRET:5JzoMqNmIFBDIk6nEqB6tCrLn2FGH4KkPcVpTZFm3UsXgYwRdUaE8lVjQ9sHbON0}
+  secret: ${JWT_SECRET}
 
 # Aggregated Swagger UI — one page that shows all services
 springdoc:

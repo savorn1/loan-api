@@ -42,6 +42,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 @Service
@@ -79,6 +80,9 @@ public class GroupLoanApplicationServiceImpl implements GroupLoanApplicationServ
                 .submittedAt(LocalDateTime.now())
                 .build();
         application = applicationRepository.save(application);
+        String applicationNo = generateApplicationNo(application);
+        applicationRepository.updateApplicationNo(application.getId(), applicationNo);
+        application.setApplicationNo(applicationNo);
 
         for (GroupLoanMemberRequest memberRequest : request.getMembers()) {
             GroupLoanMember member = GroupLoanMember.builder()
@@ -298,6 +302,7 @@ public class GroupLoanApplicationServiceImpl implements GroupLoanApplicationServ
 
         return GroupLoanApplicationResponse.builder()
                 .id(application.getId())
+                .applicationNo(application.getApplicationNo())
                 .groupId(application.getGroup().getId())
                 .groupName(application.getGroup().getName())
                 .branchId(application.getBranchId())
@@ -310,5 +315,10 @@ public class GroupLoanApplicationServiceImpl implements GroupLoanApplicationServ
                 .createdAt(application.getCreatedAt())
                 .updatedAt(application.getUpdatedAt())
                 .build();
+    }
+
+    private String generateApplicationNo(GroupLoanApplication application) {
+        String datePart = application.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+        return "GAPP-" + datePart + "-" + String.format("%06d", application.getId());
     }
 }

@@ -20,6 +20,8 @@ public class LoanCollateralResponse {
     private String reference;
     private CollateralStatus status;
     private LocalDateTime releasedAt;
+    private LocalDateTime seizedAt;
+    private String seizureReason;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

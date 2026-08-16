@@ -55,4 +55,10 @@ public class LoanCollateral extends BaseEntity {
 
     @Column(name = "released_at")
     private LocalDateTime releasedAt;
+
+    @Column(name = "seized_at")
+    private LocalDateTime seizedAt;
+
+    @Column(name = "seizure_reason")
+    private String seizureReason;
 }

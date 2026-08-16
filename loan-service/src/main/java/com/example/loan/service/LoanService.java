@@ -7,6 +7,7 @@ import com.example.loan.dto.LoanAdjustmentResponse;
 import com.example.loan.dto.DisbursementReasonRequest;
 import com.example.loan.dto.LoanCollateralRequest;
 import com.example.loan.dto.LoanCollateralResponse;
+import com.example.loan.dto.LoanCollateralSeizeRequest;
 import com.example.loan.dto.LoanDisbursementRequest;
 import com.example.loan.dto.LoanDisbursementResponse;
 import com.example.loan.dto.LoanDocumentRequest;
@@ -22,6 +23,7 @@ import com.example.loan.dto.LoanInterestRequest;
 import com.example.loan.dto.LoanInterestResponse;
 import com.example.loan.dto.LoanPaymentRequest;
 import com.example.loan.dto.LoanPaymentResponse;
+import com.example.loan.dto.LoanPaymentReverseRequest;
 import com.example.loan.dto.LoanPayoffQuoteResponse;
 import com.example.loan.dto.LoanPayoffRequest;
 import com.example.loan.dto.LoanPenaltyRequest;
@@ -30,6 +32,7 @@ import com.example.loan.dto.LoanRefinanceRequest;
 import com.example.loan.dto.LoanRefinanceResponse;
 import com.example.loan.dto.LoanRequest;
 import com.example.loan.dto.LoanResponse;
+import com.example.loan.dto.LoanRestructureRejectRequest;
 import com.example.loan.dto.LoanRestructureRequest;
 import com.example.loan.dto.LoanRestructureResponse;
 import com.example.loan.dto.LoanScheduleInstallmentResponse;
@@ -108,6 +111,8 @@ public interface LoanService {
 
     LoanCollateralResponse releaseCollateral(Long id, Long collateralId);
 
+    LoanCollateralResponse seizeCollateral(Long id, Long collateralId, LoanCollateralSeizeRequest request);
+
     LoanDocumentResponse addDocument(Long id, LoanDocumentRequest request);
 
     List<LoanDocumentResponse> getDocuments(Long id);
@@ -127,6 +132,8 @@ public interface LoanService {
     LoanPaymentResponse addPayment(Long id, LoanPaymentRequest request);
 
     List<LoanPaymentResponse> getPayments(Long id);
+
+    LoanPaymentResponse reversePayment(Long id, Long paymentId, LoanPaymentReverseRequest request);
 
     LoanPayoffQuoteResponse getPayoffQuote(Long id);
 
@@ -171,6 +178,10 @@ public interface LoanService {
     LoanRestructureResponse addRestructure(Long id, LoanRestructureRequest request);
 
     List<LoanRestructureResponse> getRestructures(Long id);
+
+    LoanRestructureResponse approveRestructure(Long id, Long restructureId);
+
+    LoanRestructureResponse rejectRestructure(Long id, Long restructureId, LoanRestructureRejectRequest request);
 
     PageResponse<LoanRestructureResponse> getAllRestructures(int page, int size, String sortBy, String sortOrder);
 

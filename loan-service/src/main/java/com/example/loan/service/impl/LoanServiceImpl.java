@@ -14,6 +14,7 @@ import com.example.loan.dto.LoanAdjustmentRequest;
 import com.example.loan.dto.LoanAdjustmentResponse;
 import com.example.loan.dto.LoanCollateralRequest;
 import com.example.loan.dto.LoanCollateralResponse;
+import com.example.loan.dto.LoanCollateralSeizeRequest;
 import com.example.loan.dto.LoanDisbursementRequest;
 import com.example.loan.dto.LoanDisbursementResponse;
 import com.example.loan.dto.LoanDocumentRequest;
@@ -30,6 +31,7 @@ import com.example.loan.dto.LoanInterestResponse;
 import com.example.loan.dto.LoanPaymentDetailResponse;
 import com.example.loan.dto.LoanPaymentRequest;
 import com.example.loan.dto.LoanPaymentResponse;
+import com.example.loan.dto.LoanPaymentReverseRequest;
 import com.example.loan.dto.LoanPayoffQuoteResponse;
 import com.example.loan.dto.LoanPayoffRequest;
 import com.example.loan.dto.LoanPenaltyRequest;
@@ -38,6 +40,7 @@ import com.example.loan.dto.LoanRefinanceRequest;
 import com.example.loan.dto.LoanRefinanceResponse;
 import com.example.loan.dto.LoanRequest;
 import com.example.loan.dto.LoanResponse;
+import com.example.loan.dto.LoanRestructureRejectRequest;
 import com.example.loan.dto.LoanRestructureRequest;
 import com.example.loan.dto.LoanRestructureResponse;
 import com.example.loan.dto.LoanScheduleInstallmentResponse;
@@ -79,6 +82,7 @@ import com.example.loan.entity.LoanStatusHistory;
 import com.example.loan.entity.LoanTransaction;
 import com.example.loan.entity.LoanWriteoff;
 import com.example.loan.entity.PenaltyStatus;
+import com.example.loan.entity.RestructureStatus;
 import com.example.loan.entity.ScheduleInstallmentStatus;
 import com.example.loan.entity.ScheduleStatus;
 import com.example.loan.entity.SettlementStatus;
@@ -86,6 +90,7 @@ import com.example.loan.entity.TransactionType;
 import com.example.loan.entity.WriteoffStatus;
 import com.example.loan.exception.AppException;
 import com.example.loan.exception.ResourceNotFoundException;
+import com.example.loan.notification.LoanNotifier;
 import com.example.loan.repository.LoanAdjustmentRepository;
 import com.example.loan.repository.LoanCollateralRepository;
 import com.example.loan.repository.LoanDocumentRepository;
@@ -159,8 +164,10 @@ public class LoanServiceImpl implements LoanService {
     private final LoanWriteoffRecoveryRepository loanWriteoffRecoveryRepository;
     private final LoanAdjustmentRepository loanAdjustmentRepository;
     private final LoanTransactionRepository loanTransactionRepository;
+    private final LoanNotifier loanNotifier;
 
     @Override
+    @Transactional
     public LoanResponse create(LoanRequest request) {
         CustomerResponse customer = customerClient.getById(request.getCustomerId()).getData();
 
@@ -308,6 +315,9 @@ public class LoanServiceImpl implements LoanService {
                 "Loan", saved.getId(), null);
 
         CustomerResponse customer = customerClient.getById(saved.getCustomerId()).getData();
+        loanNotifier.notify(customer, "Your loan has been disbursed",
+                String.format("Your loan %s for %s has been disbursed and is now active.",
+                        saved.getLoanNo(), saved.getPrincipal()));
         return toResponse(saved, customer);
     }
 
@@ -334,8 +344,9 @@ public class LoanServiceImpl implements LoanService {
                 .reference("Applied via legacy apply-payment action")
                 .build();
         LoanPayment savedPayment = loanPaymentRepository.save(payment);
-        savedPayment.setPaymentNo(generatePaymentNo(savedPayment));
-        savedPayment = loanPaymentRepository.save(savedPayment);
+        String paymentNo = generatePaymentNo(savedPayment);
+        loanPaymentRepository.updatePaymentNo(savedPayment.getId(), paymentNo);
+        savedPayment.setPaymentNo(paymentNo);
 
         // Same waterfall as addPayment: fees, then penalties, then the schedule. See
         // applyToOutstandingFeesAndPenalties for why only the remainder reduces the balance.
@@ -417,6 +428,7 @@ public class LoanServiceImpl implements LoanService {
     }
 
     @Override
+    @Transactional
     public LoanDisbursementResponse addDisbursement(Long id, LoanDisbursementRequest request) {
         Loan loan = findOrThrow(id);
         assertWithinPrincipal(loan, request.getAmount(), null);
@@ -430,8 +442,9 @@ public class LoanServiceImpl implements LoanService {
                 .createdBy(currentUsername())
                 .build();
         LoanDisbursement saved = loanDisbursementRepository.save(disbursement);
-        saved.setDisbursementNo(generateDisbursementNo(saved));
-        saved = loanDisbursementRepository.save(saved);
+        String disbursementNo = generateDisbursementNo(saved);
+        loanDisbursementRepository.updateDisbursementNo(saved.getId(), disbursementNo);
+        saved.setDisbursementNo(disbursementNo);
         return toDisbursementResponse(saved);
     }
 
@@ -667,6 +680,18 @@ public class LoanServiceImpl implements LoanService {
     }
 
     @Override
+    public LoanCollateralResponse seizeCollateral(Long id, Long collateralId, LoanCollateralSeizeRequest request) {
+        LoanCollateral collateral = findCollateralOrThrow(id, collateralId);
+        if (collateral.getStatus() != CollateralStatus.PLEDGED) {
+            throw new AppException(HttpStatus.CONFLICT, "Only PLEDGED collateral can be seized");
+        }
+        collateral.setStatus(CollateralStatus.SEIZED);
+        collateral.setSeizedAt(LocalDateTime.now());
+        collateral.setSeizureReason(request.getReason());
+        return toCollateralResponse(loanCollateralRepository.save(collateral));
+    }
+
+    @Override
     public LoanDocumentResponse addDocument(Long id, LoanDocumentRequest request) {
         Loan loan = findOrThrow(id);
         LoanDocument document = LoanDocument.builder()
@@ -750,8 +775,9 @@ public class LoanServiceImpl implements LoanService {
                 .reference(request.getReference())
                 .build();
         LoanPayment savedPayment = loanPaymentRepository.save(payment);
-        savedPayment.setPaymentNo(generatePaymentNo(savedPayment));
-        savedPayment = loanPaymentRepository.save(savedPayment);
+        String paymentNo = generatePaymentNo(savedPayment);
+        loanPaymentRepository.updatePaymentNo(savedPayment.getId(), paymentNo);
+        savedPayment.setPaymentNo(paymentNo);
 
         // Waterfall: fees, then penalties (both paid in full or not at all), then whatever's
         // left goes against the schedule. Only the schedule portion reduces outstandingBalance
@@ -811,6 +837,85 @@ public class LoanServiceImpl implements LoanService {
     }
 
     @Override
+    @Transactional
+    public LoanPaymentResponse reversePayment(Long id, Long paymentId, LoanPaymentReverseRequest request) {
+        LoanPayment payment = findPaymentOrThrow(id, paymentId);
+        if (payment.isReversed()) {
+            throw new AppException(HttpStatus.CONFLICT, "Payment is already reversed");
+        }
+        Loan loan = payment.getLoan();
+
+        payment.setReversed(true);
+        payment.setReversedAt(LocalDateTime.now());
+        payment.setReversalReason(request.getReason());
+        LoanPayment savedPayment = loanPaymentRepository.save(payment);
+
+        // Re-derive each affected installment's paid-to-date total from its remaining
+        // (non-reversed) LoanPaymentDetail rows — same computation allocatePayment does
+        // for a fresh payment, now that this payment's rows no longer count toward it.
+        List<LoanPaymentDetail> details = loanPaymentDetailRepository.findByPaymentIdOrderByIdAsc(paymentId);
+        for (LoanPaymentDetail detail : details) {
+            LoanScheduleInstallment installment = detail.getScheduleInstallment();
+            BigDecimal paidSoFar = loanPaymentDetailRepository
+                    .findByScheduleInstallmentId(installment.getId()).stream()
+                    .filter(d -> !d.getPayment().isReversed())
+                    .map(d -> d.getPrincipalAmount().add(d.getInterestAmount()))
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            installment.setStatus(
+                    paidSoFar.compareTo(installment.getTotalAmount()) >= 0 ? ScheduleInstallmentStatus.PAID
+                            : paidSoFar.compareTo(BigDecimal.ZERO) > 0 ? ScheduleInstallmentStatus.PARTIALLY_PAID
+                            : ScheduleInstallmentStatus.PENDING);
+            loanScheduleInstallmentRepository.save(installment);
+        }
+
+        // Restore outstandingBalance by exactly what this payment subtracted from it: the
+        // schedule-allocated portion (this payment's own LoanPaymentDetail rows) plus any
+        // overpayment beyond the schedule that addPayment recorded as an "Unallocated
+        // payment amount" LoanTransaction. Amounts applied to fees/penalties are NOT
+        // restored — LoanFee/LoanPenalty don't record which payment paid them (see
+        // applyToOutstandingFeesAndPenalties), so that portion can't be traced back to
+        // this payment and un-applied; only the schedule side of a payment is reversible.
+        BigDecimal scheduleAllocated = details.stream()
+                .map(d -> d.getPrincipalAmount().add(d.getInterestAmount()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal unallocated = loanTransactionRepository
+                .findByReferenceTypeAndReferenceId("LoanPayment", paymentId).stream()
+                .map(LoanTransaction::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal restoreAmount = scheduleAllocated.add(unallocated);
+
+        boolean reopening = false;
+        if (restoreAmount.compareTo(BigDecimal.ZERO) > 0) {
+            loan.setOutstandingBalance(loan.getOutstandingBalance().add(restoreAmount));
+            if (loan.getStatus() == LoanStatus.CLOSED) {
+                reopening = true;
+                loan.setStatus(LoanStatus.ACTIVE);
+                loan.setClosedAt(null);
+            }
+        }
+        Loan savedLoan = loanRepository.save(loan);
+        if (reopening) {
+            recordStatusHistory(savedLoan, LoanStatus.CLOSED, LoanStatus.ACTIVE,
+                    "Reopened: payment " + savedPayment.getPaymentNo() + " reversed");
+        }
+        if (restoreAmount.compareTo(BigDecimal.ZERO) > 0) {
+            recordTransaction(savedLoan, TransactionType.ADJUSTMENT, restoreAmount, LocalDate.now(),
+                    "LoanPayment", savedPayment.getId(), "Reversal: " + request.getReason());
+        }
+
+        return toPaymentResponse(savedPayment);
+    }
+
+    private LoanPayment findPaymentOrThrow(Long loanId, Long paymentId) {
+        LoanPayment payment = loanPaymentRepository.findById(paymentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Loan payment", paymentId));
+        if (!payment.getLoan().getId().equals(loanId)) {
+            throw new ResourceNotFoundException("Loan payment", paymentId);
+        }
+        return payment;
+    }
+
+    @Override
     public LoanPayoffQuoteResponse getPayoffQuote(Long id) {
         Loan loan = findOrThrow(id);
         if (loan.getStatus() != LoanStatus.ACTIVE) {
@@ -837,8 +942,9 @@ public class LoanServiceImpl implements LoanService {
                 .reference(request.getReference() != null ? request.getReference() : "Early payoff")
                 .build();
         LoanPayment savedPayment = loanPaymentRepository.save(payment);
-        savedPayment.setPaymentNo(generatePaymentNo(savedPayment));
-        loanPaymentRepository.save(savedPayment);
+        String paymentNo = generatePaymentNo(savedPayment);
+        loanPaymentRepository.updatePaymentNo(savedPayment.getId(), paymentNo);
+        savedPayment.setPaymentNo(paymentNo);
 
         // Pays every currently-PENDING fee/penalty in full — quote.outstandingFees/
         // outstandingPenalties was computed from exactly the same PENDING rows a moment ago
@@ -1124,37 +1230,91 @@ public class LoanServiceImpl implements LoanService {
     }
 
     @Override
-    @Transactional
     public LoanRestructureResponse addRestructure(Long id, LoanRestructureRequest request) {
         Loan loan = findOrThrow(id);
         if (loan.getStatus() != LoanStatus.ACTIVE) {
             throw new AppException(HttpStatus.CONFLICT, "Only ACTIVE loans can be restructured");
         }
 
-        // Re-amortize what's actually left, not the original principal.
+        // Just records the request — see approveRestructure for where it's actually
+        // applied to the loan (maker-checker: the requester and approver must differ).
+        LoanRestructure restructure = LoanRestructure.builder()
+                .loan(loan)
+                .newTermMonths(request.getNewTermMonths())
+                .newInterestRate(request.getNewInterestRate())
+                .reason(request.getReason())
+                .effectiveDate(request.getEffectiveDate())
+                .status(RestructureStatus.PENDING_APPROVAL)
+                .createdBy(currentUsername())
+                .build();
+        return toRestructureResponse(loanRestructureRepository.save(restructure));
+    }
+
+    @Override
+    @Transactional
+    public LoanRestructureResponse approveRestructure(Long id, Long restructureId) {
+        LoanRestructure restructure = findRestructureOrThrow(id, restructureId);
+        if (restructure.getStatus() != RestructureStatus.PENDING_APPROVAL) {
+            throw new AppException(HttpStatus.CONFLICT, "Only PENDING_APPROVAL restructures can be approved");
+        }
+        assertDifferentFromCreator(restructure, "approve");
+        Loan loan = restructure.getLoan();
+        if (loan.getStatus() != LoanStatus.ACTIVE) {
+            throw new AppException(HttpStatus.CONFLICT, "Only ACTIVE loans can be restructured");
+        }
+
+        // Re-amortize what's actually left as of approval time, not what it was when the
+        // request was made — the loan may have taken payments in between.
         BigDecimal outstanding = loan.getOutstandingBalance();
-        BigDecimal newRate = request.getNewInterestRate() != null ? request.getNewInterestRate() : loan.getInterestRate();
+        BigDecimal newRate = restructure.getNewInterestRate() != null
+                ? restructure.getNewInterestRate() : loan.getInterestRate();
 
         List<AmortizationCalculator.Installment> schedule = AmortizationCalculator.generateSchedule(
-                outstanding, newRate, request.getNewTermMonths(), request.getEffectiveDate());
-        BigDecimal emi = AmortizationCalculator.calculateEmi(outstanding, newRate, request.getNewTermMonths());
+                outstanding, newRate, restructure.getNewTermMonths(), restructure.getEffectiveDate());
+        BigDecimal emi = AmortizationCalculator.calculateEmi(outstanding, newRate, restructure.getNewTermMonths());
 
-        loan.setTermMonths(request.getNewTermMonths());
+        loan.setTermMonths(restructure.getNewTermMonths());
         loan.setInterestRate(newRate);
-        loan.setMaturityDate(request.getEffectiveDate().plusMonths(request.getNewTermMonths()));
+        loan.setMaturityDate(restructure.getEffectiveDate().plusMonths(restructure.getNewTermMonths()));
         loan.setMonthlyInstallment(emi);
         Loan savedLoan = loanRepository.save(loan);
 
         generateAndPersistSchedule(savedLoan, schedule, outstanding);
 
-        LoanRestructure restructure = LoanRestructure.builder()
-                .loan(savedLoan)
-                .newTermMonths(request.getNewTermMonths())
-                .newInterestRate(request.getNewInterestRate())
-                .reason(request.getReason())
-                .effectiveDate(request.getEffectiveDate())
-                .build();
+        restructure.setStatus(RestructureStatus.APPROVED);
+        restructure.setReviewedBy(currentUsername());
+        restructure.setReviewedAt(LocalDateTime.now());
         return toRestructureResponse(loanRestructureRepository.save(restructure));
+    }
+
+    @Override
+    public LoanRestructureResponse rejectRestructure(Long id, Long restructureId, LoanRestructureRejectRequest request) {
+        LoanRestructure restructure = findRestructureOrThrow(id, restructureId);
+        if (restructure.getStatus() != RestructureStatus.PENDING_APPROVAL) {
+            throw new AppException(HttpStatus.CONFLICT, "Only PENDING_APPROVAL restructures can be rejected");
+        }
+        assertDifferentFromCreator(restructure, "reject");
+
+        restructure.setStatus(RestructureStatus.REJECTED);
+        restructure.setReviewedBy(currentUsername());
+        restructure.setReviewedAt(LocalDateTime.now());
+        restructure.setRejectionReason(request.getReason());
+        return toRestructureResponse(loanRestructureRepository.save(restructure));
+    }
+
+    private LoanRestructure findRestructureOrThrow(Long loanId, Long restructureId) {
+        LoanRestructure restructure = loanRestructureRepository.findById(restructureId)
+                .orElseThrow(() -> new ResourceNotFoundException("Loan restructure", restructureId));
+        if (!restructure.getLoan().getId().equals(loanId)) {
+            throw new ResourceNotFoundException("Loan restructure", restructureId);
+        }
+        return restructure;
+    }
+
+    private void assertDifferentFromCreator(LoanRestructure restructure, String action) {
+        if (currentUsername().equals(restructure.getCreatedBy())) {
+            throw new AppException(HttpStatus.CONFLICT, "Cannot " + action + " a restructure you created");
+        }
     }
 
     @Override
@@ -1631,7 +1791,12 @@ public class LoanServiceImpl implements LoanService {
                 break;
             }
 
-            List<LoanPaymentDetail> existingDetails = loanPaymentDetailRepository.findByScheduleInstallmentId(installment.getId());
+            // Reversed payments no longer count toward "paid so far" — see reversePayment,
+            // which relies on this same exclusion to free the installment back up.
+            List<LoanPaymentDetail> existingDetails = loanPaymentDetailRepository
+                    .findByScheduleInstallmentId(installment.getId()).stream()
+                    .filter(detail -> !detail.getPayment().isReversed())
+                    .toList();
             BigDecimal interestPaidSoFar = existingDetails.stream()
                     .map(LoanPaymentDetail::getInterestAmount)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -1684,6 +1849,9 @@ public class LoanServiceImpl implements LoanService {
                 .method(payment.getMethod())
                 .reference(payment.getReference())
                 .allocations(allocations)
+                .reversed(payment.isReversed())
+                .reversedAt(payment.getReversedAt())
+                .reversalReason(payment.getReversalReason())
                 .createdAt(payment.getCreatedAt())
                 .updatedAt(payment.getUpdatedAt())
                 .build();
@@ -1855,6 +2023,11 @@ public class LoanServiceImpl implements LoanService {
                 .newInterestRate(restructure.getNewInterestRate())
                 .reason(restructure.getReason())
                 .effectiveDate(restructure.getEffectiveDate())
+                .status(restructure.getStatus())
+                .createdBy(restructure.getCreatedBy())
+                .reviewedBy(restructure.getReviewedBy())
+                .reviewedAt(restructure.getReviewedAt())
+                .rejectionReason(restructure.getRejectionReason())
                 .createdAt(restructure.getCreatedAt())
                 .updatedAt(restructure.getUpdatedAt())
                 .build();
@@ -1974,6 +2147,8 @@ public class LoanServiceImpl implements LoanService {
                 .reference(collateral.getReference())
                 .status(collateral.getStatus())
                 .releasedAt(collateral.getReleasedAt())
+                .seizedAt(collateral.getSeizedAt())
+                .seizureReason(collateral.getSeizureReason())
                 .createdAt(collateral.getCreatedAt())
                 .updatedAt(collateral.getUpdatedAt())
                 .build();

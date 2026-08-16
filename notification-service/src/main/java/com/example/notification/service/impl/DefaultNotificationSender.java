@@ -13,10 +13,10 @@ import org.springframework.stereotype.Component;
 // channel registering its own NotificationSender, which would leave Spring
 // with an ambiguous bean to inject into NotificationServiceImpl.
 //
-// Only EMAIL is real (via EmailSender/Mailhog in dev). SMS/PUSH/IN_APP, and
-// EMAIL with no recipientContact, fall back to logging what would have gone
-// out and reporting success — same behavior this class had before it was
-// LoggingNotificationSender for every channel.
+// EMAIL (via EmailSender/Mailhog in dev) and SMS (via SmsSender, log-only —
+// no gateway configured) each have a dedicated sender. PUSH/IN_APP, and
+// either channel with no recipientContact, fall back to logging what would
+// have gone out and reporting success.
 @Component
 @RequiredArgsConstructor
 public class DefaultNotificationSender implements NotificationSender {
@@ -24,13 +24,18 @@ public class DefaultNotificationSender implements NotificationSender {
     private static final Logger log = LoggerFactory.getLogger(DefaultNotificationSender.class);
 
     private final EmailSender emailSender;
+    private final SmsSender smsSender;
 
     @Override
     public String send(Notification notification) {
-        if (notification.getChannel() == NotificationChannel.EMAIL
-                && StringUtils.hasText(notification.getRecipientContact())) {
-            return emailSender.send(
-                    notification.getRecipientContact(), notification.getSubject(), notification.getMessage());
+        if (StringUtils.hasText(notification.getRecipientContact())) {
+            if (notification.getChannel() == NotificationChannel.EMAIL) {
+                return emailSender.send(
+                        notification.getRecipientContact(), notification.getSubject(), notification.getMessage());
+            }
+            if (notification.getChannel() == NotificationChannel.SMS) {
+                return smsSender.send(notification.getRecipientContact(), notification.getMessage());
+            }
         }
 
         log.info("Notification [{} -> {}:{}] subject=\"{}\" message=\"{}\"",

@@ -2,9 +2,12 @@ package com.example.loan.entity;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -46,4 +49,21 @@ public class LoanRestructure extends BaseEntity {
 
     @Column(name = "effective_date", nullable = false)
     private LocalDate effectiveDate;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    @Builder.Default
+    private RestructureStatus status = RestructureStatus.PENDING_APPROVAL;
+
+    @Column(name = "created_by")
+    private String createdBy;
+
+    @Column(name = "reviewed_by")
+    private String reviewedBy;
+
+    @Column(name = "reviewed_at")
+    private LocalDateTime reviewedAt;
+
+    @Column(name = "rejection_reason")
+    private String rejectionReason;
 }

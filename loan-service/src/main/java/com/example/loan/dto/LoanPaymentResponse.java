@@ -21,6 +21,9 @@ public class LoanPaymentResponse {
     private DisbursementMethod method;
     private String reference;
     private List<LoanPaymentDetailResponse> allocations;
+    private boolean reversed;
+    private LocalDateTime reversedAt;
+    private String reversalReason;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

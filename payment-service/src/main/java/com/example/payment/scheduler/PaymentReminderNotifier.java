@@ -17,11 +17,11 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 // Shared by both reminder schedulers (due-soon and overdue): resolves a
-// payment's loan -> customer to get an email address, then calls
-// notification-service. One bad Feign call (or a customer with no email on
-// file) skips just that payment instead of failing the whole scheduled batch
-// — same defensive per-row pattern as CollectionServiceImpl's
-// fetchLoan/fetchCustomer.
+// payment's loan -> customer, then calls notification-service on every
+// channel the customer has contact info for (email and/or SMS) rather than
+// email alone. One bad Feign call (or a customer with neither on file) skips
+// just that payment instead of failing the whole scheduled batch — same
+// defensive per-row pattern as CollectionServiceImpl's fetchLoan/fetchCustomer.
 @Component
 @RequiredArgsConstructor
 public class PaymentReminderNotifier {
@@ -38,18 +38,27 @@ public class PaymentReminderNotifier {
             if (loan == null) return;
 
             CustomerResponse customer = customerClient.getById(loan.getCustomerId()).getData();
-            if (customer == null || !StringUtils.hasText(customer.getEmail())) return;
+            if (customer == null) return;
 
-            notificationClient.create(NotificationRequest.builder()
-                    .recipientType(RecipientType.CUSTOMER)
-                    .recipientId(loan.getCustomerId())
-                    .channel(NotificationChannel.EMAIL)
-                    .recipientContact(customer.getEmail())
-                    .subject(subject)
-                    .message(message)
-                    .build());
+            if (StringUtils.hasText(customer.getEmail())) {
+                send(loan.getCustomerId(), NotificationChannel.EMAIL, customer.getEmail(), subject, message);
+            }
+            if (StringUtils.hasText(customer.getPhone())) {
+                send(loan.getCustomerId(), NotificationChannel.SMS, customer.getPhone(), subject, message);
+            }
         } catch (FeignException ex) {
             log.warn("Skipping reminder for payment {}: {}", payment.getId(), ex.getMessage());
         }
+    }
+
+    private void send(Long customerId, NotificationChannel channel, String contact, String subject, String message) {
+        notificationClient.create(NotificationRequest.builder()
+                .recipientType(RecipientType.CUSTOMER)
+                .recipientId(customerId)
+                .channel(channel)
+                .recipientContact(contact)
+                .subject(subject)
+                .message(message)
+                .build());
     }
 }

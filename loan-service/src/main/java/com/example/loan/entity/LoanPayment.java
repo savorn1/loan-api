@@ -5,6 +5,7 @@ import lombok.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 // Money received against a loan, tracked directly in loan-service — distinct
 // from payment-service's installment ledger used on the Overview tab. On
@@ -27,8 +28,12 @@ public class LoanPayment extends BaseEntity {
     // System-generated receipt number, distinct from the free-text `reference`
     // below (a bank slip/cheque number the teller types in). Assigned after the
     // initial save, once the id is known — same two-phase-save pattern as
-    // Loan.loanNo. Nullable because ddl-auto=update can't add a NOT NULL column
-    // to a table that already has rows.
+    // Loan.loanNo, including the same updatable=false gotcha: a plain entity
+    // save() can't write it after the row exists (Hibernate excludes non-updatable
+    // columns from generated UPDATEs) — see LoanPaymentRepository.updatePaymentNo,
+    // a bulk JPQL update, which is the only way around that. Nullable because
+    // ddl-auto=update can't add a NOT NULL column to a table that already has rows;
+    // LoanPaymentNoBackfill fills in rows that predate this fix.
     @Column(unique = true, updatable = false)
     private String paymentNo;
 
@@ -47,4 +52,14 @@ public class LoanPayment extends BaseEntity {
     private DisbursementMethod method;
 
     private String reference;
+
+    @Column(nullable = false)
+    @Builder.Default
+    private boolean reversed = false;
+
+    @Column(name = "reversed_at")
+    private LocalDateTime reversedAt;
+
+    @Column(name = "reversal_reason")
+    private String reversalReason;
 }

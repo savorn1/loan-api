@@ -8,4 +8,6 @@ import java.util.List;
 public interface LoanTransactionRepository extends JpaRepository<LoanTransaction, Long> {
 
     List<LoanTransaction> findByLoanIdOrderByTransactionDateAscIdAsc(Long loanId);
+
+    List<LoanTransaction> findByReferenceTypeAndReferenceId(String referenceType, Long referenceId);
 }

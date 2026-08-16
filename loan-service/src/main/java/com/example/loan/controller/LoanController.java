@@ -8,6 +8,7 @@ import com.example.loan.dto.LoanAdjustmentRequest;
 import com.example.loan.dto.LoanAdjustmentResponse;
 import com.example.loan.dto.LoanCollateralRequest;
 import com.example.loan.dto.LoanCollateralResponse;
+import com.example.loan.dto.LoanCollateralSeizeRequest;
 import com.example.loan.dto.LoanDisbursementRequest;
 import com.example.loan.dto.LoanDisbursementResponse;
 import com.example.loan.dto.LoanDocumentRequest;
@@ -23,6 +24,7 @@ import com.example.loan.dto.LoanInterestRequest;
 import com.example.loan.dto.LoanInterestResponse;
 import com.example.loan.dto.LoanPaymentRequest;
 import com.example.loan.dto.LoanPaymentResponse;
+import com.example.loan.dto.LoanPaymentReverseRequest;
 import com.example.loan.dto.LoanPayoffQuoteResponse;
 import com.example.loan.dto.LoanPayoffRequest;
 import com.example.loan.dto.LoanPenaltyRequest;
@@ -31,6 +33,7 @@ import com.example.loan.dto.LoanRefinanceRequest;
 import com.example.loan.dto.LoanRefinanceResponse;
 import com.example.loan.dto.LoanRequest;
 import com.example.loan.dto.LoanResponse;
+import com.example.loan.dto.LoanRestructureRejectRequest;
 import com.example.loan.dto.LoanRestructureRequest;
 import com.example.loan.dto.LoanRestructureResponse;
 import com.example.loan.dto.LoanScheduleInstallmentResponse;
@@ -268,6 +271,15 @@ public class LoanController {
         return ResponseEntity.ok(ApiResponse.success("Collateral released", loanService.releaseCollateral(id, collateralId)));
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
+    @PutMapping("/{id}/collaterals/{collateralId}/seize")
+    public ResponseEntity<ApiResponse<LoanCollateralResponse>> seizeCollateral(
+            @PathVariable Long id, @PathVariable Long collateralId,
+            @Valid @RequestBody LoanCollateralSeizeRequest request) {
+        return ResponseEntity.ok(
+                ApiResponse.success("Collateral seized", loanService.seizeCollateral(id, collateralId, request)));
+    }
+
     @GetMapping("/{id}/documents")
     public ResponseEntity<ApiResponse<List<LoanDocumentResponse>>> getDocuments(@PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.success(loanService.getDocuments(id)));
@@ -331,6 +343,15 @@ public class LoanController {
             @PathVariable Long id, @Valid @RequestBody LoanPaymentRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("Payment recorded", loanService.addPayment(id, request)));
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @PostMapping("/{id}/payments/{paymentId}/reverse")
+    public ResponseEntity<ApiResponse<LoanPaymentResponse>> reversePayment(
+            @PathVariable Long id, @PathVariable Long paymentId,
+            @Valid @RequestBody LoanPaymentReverseRequest request) {
+        return ResponseEntity.ok(
+                ApiResponse.success("Payment reversed", loanService.reversePayment(id, paymentId, request)));
     }
 
     // What it actually costs to close this loan today — see LoanServiceImpl.computePayoffQuote
@@ -490,7 +511,24 @@ public class LoanController {
     public ResponseEntity<ApiResponse<LoanRestructureResponse>> addRestructure(
             @PathVariable Long id, @Valid @RequestBody LoanRestructureRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success("Loan restructured", loanService.addRestructure(id, request)));
+                .body(ApiResponse.success("Restructure requested", loanService.addRestructure(id, request)));
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @PutMapping("/{id}/restructures/{restructureId}/approve")
+    public ResponseEntity<ApiResponse<LoanRestructureResponse>> approveRestructure(
+            @PathVariable Long id, @PathVariable Long restructureId) {
+        return ResponseEntity.ok(
+                ApiResponse.success("Restructure approved", loanService.approveRestructure(id, restructureId)));
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @PutMapping("/{id}/restructures/{restructureId}/reject")
+    public ResponseEntity<ApiResponse<LoanRestructureResponse>> rejectRestructure(
+            @PathVariable Long id, @PathVariable Long restructureId,
+            @Valid @RequestBody LoanRestructureRejectRequest request) {
+        return ResponseEntity.ok(
+                ApiResponse.success("Restructure rejected", loanService.rejectRestructure(id, restructureId, request)));
     }
 
     @GetMapping("/restructures")

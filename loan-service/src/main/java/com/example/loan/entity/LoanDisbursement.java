@@ -37,8 +37,13 @@ public class LoanDisbursement extends BaseEntity {
     // System-generated tracking number, distinct from the free-text `reference`
     // below (a bank transfer/cheque number entered by the creator). Assigned
     // after the initial save, once the id is known — same two-phase-save
-    // pattern as Loan.loanNo. Nullable because ddl-auto=update can't add a NOT
-    // NULL column to a table that already has rows.
+    // pattern as Loan.loanNo, including the same updatable=false gotcha: a plain
+    // entity save() can't write it after the row exists (Hibernate excludes
+    // non-updatable columns from generated UPDATEs) — see
+    // LoanDisbursementRepository.updateDisbursementNo, a bulk JPQL update, which
+    // is the only way around that. Nullable because ddl-auto=update can't add a
+    // NOT NULL column to a table that already has rows; LoanDisbursementNoBackfill
+    // fills in rows that predate this fix.
     @Column(unique = true, updatable = false)
     private String disbursementNo;
 

@@ -58,6 +58,7 @@ public class ApplicationServiceImpl implements ApplicationService {
     private final FileStorageService fileStorageService;
 
     @Override
+    @Transactional
     public ApplicationResponse create(ApplicationRequest request) {
         CustomerResponse customer = customerClient.getById(request.getCustomerId()).getData();
 

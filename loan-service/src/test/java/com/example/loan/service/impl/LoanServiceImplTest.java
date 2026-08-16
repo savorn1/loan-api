@@ -8,10 +8,14 @@ import com.example.loan.dto.ApplyPaymentRequest;
 import com.example.loan.dto.CustomerResponse;
 import com.example.loan.dto.JournalEntryGenerateRequest;
 import com.example.loan.dto.JournalEntryResponse;
+import com.example.loan.dto.LoanCollateralResponse;
 import com.example.loan.dto.LoanRefinanceRequest;
+import com.example.loan.dto.LoanRestructureResponse;
 import com.example.loan.dto.LoanResponse;
 import com.example.loan.dto.LoanPayoffQuoteResponse;
 import com.example.loan.dto.LoanPayoffRequest;
+import com.example.loan.dto.LoanPaymentResponse;
+import com.example.loan.dto.LoanPaymentReverseRequest;
 import com.example.loan.dto.LoanWriteoffRecoveryRequest;
 import com.example.loan.entity.LoanWriteoff;
 import com.example.loan.entity.WriteoffStatus;
@@ -98,6 +102,7 @@ class LoanServiceImplTest {
     @Mock private com.example.loan.repository.LoanWriteoffRecoveryRepository loanWriteoffRecoveryRepository;
     @Mock private com.example.loan.repository.LoanAdjustmentRepository loanAdjustmentRepository;
     @Mock private LoanTransactionRepository loanTransactionRepository;
+    @Mock private com.example.loan.notification.LoanNotifier loanNotifier;
 
     private LoanServiceImpl service;
 
@@ -111,7 +116,7 @@ class LoanServiceImplTest {
                 loanScheduleInstallmentRepository, loanPaymentRepository, loanPaymentDetailRepository,
                 loanInterestAccrualRepository, loanPenaltyRepository, loanFeeRepository, loanRestructureRepository,
                 loanRefinanceRepository, loanSettlementRepository, loanWriteoffRepository,
-                loanWriteoffRecoveryRepository, loanAdjustmentRepository, loanTransactionRepository);
+                loanWriteoffRecoveryRepository, loanAdjustmentRepository, loanTransactionRepository, loanNotifier);
 
         activeLoan = Loan.builder()
                 .customerId(4L)
@@ -272,6 +277,247 @@ class LoanServiceImplTest {
         assertThat(pendingFee.getStatus()).isEqualTo(FeeStatus.PENDING);
         verify(loanFeeRepository, never()).save(any());
         assertThat(response.getOutstandingBalance()).isEqualByComparingTo("972.30");
+    }
+
+    // ── reversePayment: undoes the schedule allocation and outstandingBalance effect ───
+
+    @Test
+    void reversePayment_restoresInstallmentAndOutstandingBalanceAndFlagsReversed() {
+        LoanSchedule schedule = LoanSchedule.builder().loan(activeLoan).status(ScheduleStatus.ACTIVE).build();
+        schedule.setId(1L);
+
+        LoanScheduleInstallment installment = LoanScheduleInstallment.builder()
+                .schedule(schedule).loan(activeLoan).installmentNumber(1)
+                .principalAmount(new BigDecimal("45.83")).interestAmount(new BigDecimal("4.17"))
+                .totalAmount(new BigDecimal("50.00")).status(ScheduleInstallmentStatus.PAID).build();
+        installment.setId(115L);
+
+        LoanPayment payment = LoanPayment.builder()
+                .loan(activeLoan).amount(new BigDecimal("50.00")).paymentDate(LocalDate.now())
+                .method(DisbursementMethod.CASH).paymentNo("PMT-1").build();
+        payment.setId(42L);
+
+        var detail = com.example.loan.entity.LoanPaymentDetail.builder()
+                .payment(payment).scheduleInstallment(installment)
+                .principalAmount(new BigDecimal("45.83")).interestAmount(new BigDecimal("4.17"))
+                .penaltyAmount(BigDecimal.ZERO).build();
+        detail.setId(1L);
+
+        when(loanPaymentRepository.findById(42L)).thenReturn(Optional.of(payment));
+        when(loanPaymentRepository.save(any(LoanPayment.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(loanPaymentDetailRepository.findByPaymentIdOrderByIdAsc(42L)).thenReturn(List.of(detail));
+        // Still "in the DB" from the repository's point of view — the service itself must
+        // exclude it via detail.getPayment().isReversed(), which is true by the time this
+        // is queried (reversePayment flips the flag before recomputing installment status).
+        when(loanPaymentDetailRepository.findByScheduleInstallmentId(115L)).thenReturn(List.of(detail));
+        when(loanScheduleInstallmentRepository.save(any(LoanScheduleInstallment.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+        when(loanTransactionRepository.findByReferenceTypeAndReferenceId("LoanPayment", 42L))
+                .thenReturn(List.of());
+
+        LoanPaymentReverseRequest request = new LoanPaymentReverseRequest();
+        request.setReason("Bounced cheque");
+
+        LoanPaymentResponse response = service.reversePayment(7L, 42L, request);
+
+        assertThat(response.isReversed()).isTrue();
+        assertThat(response.getReversalReason()).isEqualTo("Bounced cheque");
+        assertThat(response.getReversedAt()).isNotNull();
+        assertThat(installment.getStatus()).isEqualTo(ScheduleInstallmentStatus.PENDING);
+        // 977.30 (original) + 45.83 + 4.17 restored
+        assertThat(activeLoan.getOutstandingBalance()).isEqualByComparingTo("1027.30");
+
+        ArgumentCaptor<LoanTransaction> txnCaptor = ArgumentCaptor.forClass(LoanTransaction.class);
+        verify(loanTransactionRepository).save(txnCaptor.capture());
+        assertThat(txnCaptor.getValue().getType()).isEqualTo(com.example.loan.entity.TransactionType.ADJUSTMENT);
+        assertThat(txnCaptor.getValue().getAmount()).isEqualByComparingTo("50.00");
+    }
+
+    @Test
+    void reversePayment_rejectsAlreadyReversedPayment() {
+        LoanPayment payment = LoanPayment.builder().loan(activeLoan).reversed(true).build();
+        payment.setId(42L);
+        when(loanPaymentRepository.findById(42L)).thenReturn(Optional.of(payment));
+
+        LoanPaymentReverseRequest request = new LoanPaymentReverseRequest();
+        request.setReason("dup");
+
+        assertThatThrownBy(() -> service.reversePayment(7L, 42L, request)).isInstanceOf(AppException.class);
+    }
+
+    @Test
+    void reversePayment_rejectsPaymentBelongingToAnotherLoan() {
+        Loan otherLoan = Loan.builder().status(LoanStatus.ACTIVE).build();
+        otherLoan.setId(99L);
+        LoanPayment payment = LoanPayment.builder().loan(otherLoan).build();
+        payment.setId(42L);
+        when(loanPaymentRepository.findById(42L)).thenReturn(Optional.of(payment));
+
+        LoanPaymentReverseRequest request = new LoanPaymentReverseRequest();
+        request.setReason("wrong loan");
+
+        assertThatThrownBy(() -> service.reversePayment(7L, 42L, request))
+                .isInstanceOf(com.example.loan.exception.ResourceNotFoundException.class);
+    }
+
+    // ── seizeCollateral: marks SEIZED with a reason, mirrors releaseCollateral ─────────
+
+    @Test
+    void seizeCollateral_marksSeizedWithReasonAndTimestamp() {
+        var collateral = com.example.loan.entity.LoanCollateral.builder()
+                .loan(activeLoan).type(com.example.loan.entity.CollateralType.VEHICLE)
+                .description("Toyota Camry 2020").estimatedValue(new BigDecimal("8000.00"))
+                .status(com.example.loan.entity.CollateralStatus.PLEDGED).build();
+        collateral.setId(3L);
+        when(loanCollateralRepository.findById(3L)).thenReturn(Optional.of(collateral));
+        when(loanCollateralRepository.save(any(com.example.loan.entity.LoanCollateral.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        var request = new com.example.loan.dto.LoanCollateralSeizeRequest();
+        request.setReason("90+ days delinquent, borrower unreachable");
+
+        LoanCollateralResponse response = service.seizeCollateral(7L, 3L, request);
+
+        assertThat(response.getStatus()).isEqualTo(com.example.loan.entity.CollateralStatus.SEIZED);
+        assertThat(response.getSeizureReason()).isEqualTo("90+ days delinquent, borrower unreachable");
+        assertThat(response.getSeizedAt()).isNotNull();
+    }
+
+    @Test
+    void seizeCollateral_rejectsNonPledgedCollateral() {
+        var collateral = com.example.loan.entity.LoanCollateral.builder()
+                .loan(activeLoan).type(com.example.loan.entity.CollateralType.VEHICLE)
+                .description("Toyota Camry 2020").estimatedValue(new BigDecimal("8000.00"))
+                .status(com.example.loan.entity.CollateralStatus.RELEASED).build();
+        collateral.setId(3L);
+        when(loanCollateralRepository.findById(3L)).thenReturn(Optional.of(collateral));
+
+        var request = new com.example.loan.dto.LoanCollateralSeizeRequest();
+        request.setReason("too late");
+
+        assertThatThrownBy(() -> service.seizeCollateral(7L, 3L, request)).isInstanceOf(AppException.class);
+    }
+
+    // ── restructure approval: addRestructure only requests, approveRestructure applies ─
+
+    @Test
+    void addRestructure_onlyRecordsTheRequest_doesNotTouchTheLoanYet() {
+        when(loanRepository.findById(7L)).thenReturn(Optional.of(activeLoan));
+        when(loanRestructureRepository.save(any(com.example.loan.entity.LoanRestructure.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        var request = new com.example.loan.dto.LoanRestructureRequest();
+        request.setNewTermMonths(24);
+        request.setNewInterestRate(new BigDecimal("4.50"));
+        request.setReason("Borrower requested lower payment");
+        request.setEffectiveDate(LocalDate.of(2026, 9, 1));
+
+        LoanRestructureResponse response = service.addRestructure(7L, request);
+
+        assertThat(response.getStatus()).isEqualTo(com.example.loan.entity.RestructureStatus.PENDING_APPROVAL);
+        // Original term/rate untouched until approval.
+        assertThat(activeLoan.getTermMonths()).isEqualTo(12);
+        assertThat(activeLoan.getInterestRate()).isEqualByComparingTo("5.00");
+        verify(loanScheduleRepository, never()).save(any());
+    }
+
+    @Test
+    void approveRestructure_appliesNewTermAndRateAndRegeneratesSchedule() {
+        activeLoan.setTermMonths(12);
+        activeLoan.setInterestRate(new BigDecimal("5.00"));
+
+        var restructure = com.example.loan.entity.LoanRestructure.builder()
+                .loan(activeLoan).newTermMonths(24).newInterestRate(new BigDecimal("4.50"))
+                .reason("Lower payment").effectiveDate(LocalDate.of(2026, 9, 1))
+                .status(com.example.loan.entity.RestructureStatus.PENDING_APPROVAL)
+                .createdBy("maker").build();
+        restructure.setId(1L);
+        when(loanRestructureRepository.findById(1L)).thenReturn(Optional.of(restructure));
+        when(loanRestructureRepository.save(any(com.example.loan.entity.LoanRestructure.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+        when(loanScheduleRepository.findByLoanIdAndStatus(7L, ScheduleStatus.ACTIVE)).thenReturn(List.of());
+        when(loanScheduleRepository.save(any(LoanSchedule.class))).thenAnswer(inv -> {
+            LoanSchedule s = inv.getArgument(0);
+            s.setId(9L);
+            return s;
+        });
+
+        LoanRestructureResponse response = service.approveRestructure(7L, 1L);
+
+        assertThat(response.getStatus()).isEqualTo(com.example.loan.entity.RestructureStatus.APPROVED);
+        assertThat(response.getReviewedAt()).isNotNull();
+        assertThat(activeLoan.getTermMonths()).isEqualTo(24);
+        assertThat(activeLoan.getInterestRate()).isEqualByComparingTo("4.50");
+        assertThat(activeLoan.getMaturityDate()).isEqualTo(LocalDate.of(2028, 9, 1));
+        verify(loanScheduleInstallmentRepository).saveAll(any());
+    }
+
+    @Test
+    void approveRestructure_rejectsSameUserApprovingTheirOwnRequest() {
+        var restructure = com.example.loan.entity.LoanRestructure.builder()
+                .loan(activeLoan).newTermMonths(24).reason("x").effectiveDate(LocalDate.now())
+                .status(com.example.loan.entity.RestructureStatus.PENDING_APPROVAL)
+                .createdBy("system").build();
+        restructure.setId(1L);
+        when(loanRestructureRepository.findById(1L)).thenReturn(Optional.of(restructure));
+
+        // currentUsername() falls back to "system" with no authenticated principal in
+        // this test context, same as the requester — exercises the maker-checker guard.
+        assertThatThrownBy(() -> service.approveRestructure(7L, 1L)).isInstanceOf(AppException.class);
+    }
+
+    @Test
+    void rejectRestructure_marksRejectedWithReasonAndDoesNotTouchTheLoan() {
+        var restructure = com.example.loan.entity.LoanRestructure.builder()
+                .loan(activeLoan).newTermMonths(24).reason("x").effectiveDate(LocalDate.now())
+                .status(com.example.loan.entity.RestructureStatus.PENDING_APPROVAL)
+                .createdBy("maker").build();
+        restructure.setId(1L);
+        when(loanRestructureRepository.findById(1L)).thenReturn(Optional.of(restructure));
+        when(loanRestructureRepository.save(any(com.example.loan.entity.LoanRestructure.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        var request = new com.example.loan.dto.LoanRestructureRejectRequest();
+        request.setReason("Term extension too aggressive");
+
+        LoanRestructureResponse response = service.rejectRestructure(7L, 1L, request);
+
+        assertThat(response.getStatus()).isEqualTo(com.example.loan.entity.RestructureStatus.REJECTED);
+        assertThat(response.getRejectionReason()).isEqualTo("Term extension too aggressive");
+        assertThat(activeLoan.getTermMonths()).isEqualTo(12);
+        verify(loanScheduleRepository, never()).save(any());
+    }
+
+    // ── disburse: notifies the customer once the loan goes ACTIVE ──────────────────────
+
+    @Test
+    void disburse_notifiesCustomerOnceLoanIsActive() {
+        Loan approvedLoan = Loan.builder()
+                .customerId(4L).branchId(1L).loanNo("LN-1")
+                .principal(new BigDecimal("1000.00")).interestRate(new BigDecimal("5.00")).termMonths(12)
+                .status(LoanStatus.APPROVED).build();
+        approvedLoan.setId(8L);
+        when(loanRepository.findById(8L)).thenReturn(Optional.of(approvedLoan));
+        when(loanScheduleRepository.findByLoanIdAndStatus(8L, ScheduleStatus.ACTIVE)).thenReturn(List.of());
+        when(loanScheduleRepository.save(any(LoanSchedule.class))).thenAnswer(inv -> {
+            LoanSchedule s = inv.getArgument(0);
+            s.setId(11L);
+            return s;
+        });
+
+        CustomerResponse customer = new CustomerResponse();
+        customer.setEmail("dara@example.com");
+        customer.setPhone("+855123456789");
+        when(customerClient.getById(4L)).thenReturn(ApiResponse.success(customer));
+
+        service.disburse(8L);
+
+        assertThat(approvedLoan.getStatus()).isEqualTo(LoanStatus.ACTIVE);
+        ArgumentCaptor<CustomerResponse> customerCaptor = ArgumentCaptor.forClass(CustomerResponse.class);
+        ArgumentCaptor<String> messageCaptor = ArgumentCaptor.forClass(String.class);
+        verify(loanNotifier).notify(customerCaptor.capture(), any(), messageCaptor.capture());
+        assertThat(customerCaptor.getValue()).isSameAs(customer);
+        assertThat(messageCaptor.getValue()).contains("LN-1").contains("1000.00");
     }
 
     // ── addRefinance: must close the old loan, not just leave a note ───────────────────

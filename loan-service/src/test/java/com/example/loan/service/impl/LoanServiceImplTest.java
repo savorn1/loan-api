@@ -14,6 +14,7 @@ import com.example.loan.dto.LoanRestructureResponse;
 import com.example.loan.dto.LoanResponse;
 import com.example.loan.dto.LoanPayoffQuoteResponse;
 import com.example.loan.dto.LoanPayoffRequest;
+import com.example.loan.dto.LoanPaymentRequest;
 import com.example.loan.dto.LoanPaymentResponse;
 import com.example.loan.dto.LoanPaymentReverseRequest;
 import com.example.loan.dto.LoanWriteoffRecoveryRequest;
@@ -282,7 +283,40 @@ class LoanServiceImplTest {
     // ── reversePayment: undoes the schedule allocation and outstandingBalance effect ───
 
     @Test
-    void reversePayment_restoresInstallmentAndOutstandingBalanceAndFlagsReversed() {
+    void reversePayment_onlyRecordsTheRequest_doesNotTouchTheLoanYet() {
+        LoanPayment payment = LoanPayment.builder()
+                .loan(activeLoan).amount(new BigDecimal("50.00")).paymentDate(LocalDate.now())
+                .method(DisbursementMethod.CASH).paymentNo("PMT-1").build();
+        payment.setId(42L);
+        when(loanPaymentRepository.findById(42L)).thenReturn(Optional.of(payment));
+        when(loanPaymentRepository.save(any(LoanPayment.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        LoanPaymentReverseRequest request = new LoanPaymentReverseRequest();
+        request.setReason("Bounced cheque");
+
+        LoanPaymentResponse response = service.reversePayment(7L, 42L, request);
+
+        assertThat(response.getReversalStatus()).isEqualTo(com.example.loan.entity.PaymentReversalStatus.PENDING_APPROVAL);
+        assertThat(response.getReversalReason()).isEqualTo("Bounced cheque");
+        assertThat(activeLoan.getOutstandingBalance()).isEqualByComparingTo("977.30");
+        verify(loanScheduleInstallmentRepository, never()).save(any());
+    }
+
+    @Test
+    void reversePayment_rejectsWhenReversalAlreadyRequested() {
+        LoanPayment payment = LoanPayment.builder().loan(activeLoan)
+                .reversalStatus(com.example.loan.entity.PaymentReversalStatus.PENDING_APPROVAL).build();
+        payment.setId(42L);
+        when(loanPaymentRepository.findById(42L)).thenReturn(Optional.of(payment));
+
+        LoanPaymentReverseRequest request = new LoanPaymentReverseRequest();
+        request.setReason("dup");
+
+        assertThatThrownBy(() -> service.reversePayment(7L, 42L, request)).isInstanceOf(AppException.class);
+    }
+
+    @Test
+    void approvePaymentReversal_restoresInstallmentAndOutstandingBalance() {
         LoanSchedule schedule = LoanSchedule.builder().loan(activeLoan).status(ScheduleStatus.ACTIVE).build();
         schedule.setId(1L);
 
@@ -294,7 +328,9 @@ class LoanServiceImplTest {
 
         LoanPayment payment = LoanPayment.builder()
                 .loan(activeLoan).amount(new BigDecimal("50.00")).paymentDate(LocalDate.now())
-                .method(DisbursementMethod.CASH).paymentNo("PMT-1").build();
+                .method(DisbursementMethod.CASH).paymentNo("PMT-1")
+                .reversalStatus(com.example.loan.entity.PaymentReversalStatus.PENDING_APPROVAL)
+                .reversalReason("Bounced cheque").reversalRequestedBy("maker").build();
         payment.setId(42L);
 
         var detail = com.example.loan.entity.LoanPaymentDetail.builder()
@@ -308,21 +344,17 @@ class LoanServiceImplTest {
         when(loanPaymentDetailRepository.findByPaymentIdOrderByIdAsc(42L)).thenReturn(List.of(detail));
         // Still "in the DB" from the repository's point of view — the service itself must
         // exclude it via detail.getPayment().isReversed(), which is true by the time this
-        // is queried (reversePayment flips the flag before recomputing installment status).
+        // is queried (approvePaymentReversal flips the status before recomputing installments).
         when(loanPaymentDetailRepository.findByScheduleInstallmentId(115L)).thenReturn(List.of(detail));
         when(loanScheduleInstallmentRepository.save(any(LoanScheduleInstallment.class)))
                 .thenAnswer(inv -> inv.getArgument(0));
         when(loanTransactionRepository.findByReferenceTypeAndReferenceId("LoanPayment", 42L))
                 .thenReturn(List.of());
 
-        LoanPaymentReverseRequest request = new LoanPaymentReverseRequest();
-        request.setReason("Bounced cheque");
+        LoanPaymentResponse response = service.approvePaymentReversal(7L, 42L);
 
-        LoanPaymentResponse response = service.reversePayment(7L, 42L, request);
-
-        assertThat(response.isReversed()).isTrue();
-        assertThat(response.getReversalReason()).isEqualTo("Bounced cheque");
-        assertThat(response.getReversedAt()).isNotNull();
+        assertThat(response.getReversalStatus()).isEqualTo(com.example.loan.entity.PaymentReversalStatus.APPROVED);
+        assertThat(response.getReversalReviewedAt()).isNotNull();
         assertThat(installment.getStatus()).isEqualTo(ScheduleInstallmentStatus.PENDING);
         // 977.30 (original) + 45.83 + 4.17 restored
         assertThat(activeLoan.getOutstandingBalance()).isEqualByComparingTo("1027.30");
@@ -334,15 +366,35 @@ class LoanServiceImplTest {
     }
 
     @Test
-    void reversePayment_rejectsAlreadyReversedPayment() {
-        LoanPayment payment = LoanPayment.builder().loan(activeLoan).reversed(true).build();
+    void approvePaymentReversal_rejectsSameUserApprovingTheirOwnRequest() {
+        LoanPayment payment = LoanPayment.builder().loan(activeLoan)
+                .reversalStatus(com.example.loan.entity.PaymentReversalStatus.PENDING_APPROVAL)
+                .reversalRequestedBy("system").build();
         payment.setId(42L);
         when(loanPaymentRepository.findById(42L)).thenReturn(Optional.of(payment));
 
-        LoanPaymentReverseRequest request = new LoanPaymentReverseRequest();
-        request.setReason("dup");
+        // currentUsername() falls back to "system" with no authenticated principal in
+        // this test context, same as the requester — exercises the maker-checker guard.
+        assertThatThrownBy(() -> service.approvePaymentReversal(7L, 42L)).isInstanceOf(AppException.class);
+    }
 
-        assertThatThrownBy(() -> service.reversePayment(7L, 42L, request)).isInstanceOf(AppException.class);
+    @Test
+    void rejectPaymentReversal_marksRejectedAndDoesNotTouchTheLoan() {
+        LoanPayment payment = LoanPayment.builder().loan(activeLoan)
+                .reversalStatus(com.example.loan.entity.PaymentReversalStatus.PENDING_APPROVAL)
+                .reversalRequestedBy("maker").build();
+        payment.setId(42L);
+        when(loanPaymentRepository.findById(42L)).thenReturn(Optional.of(payment));
+        when(loanPaymentRepository.save(any(LoanPayment.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        var request = new com.example.loan.dto.LoanPaymentReversalRejectRequest();
+        request.setReason("Insufficient evidence");
+
+        LoanPaymentResponse response = service.rejectPaymentReversal(7L, 42L, request);
+
+        assertThat(response.getReversalStatus()).isEqualTo(com.example.loan.entity.PaymentReversalStatus.REJECTED);
+        assertThat(response.getReversalRejectionReason()).isEqualTo("Insufficient evidence");
+        assertThat(activeLoan.getOutstandingBalance()).isEqualByComparingTo("977.30");
     }
 
     @Test
@@ -486,6 +538,85 @@ class LoanServiceImplTest {
         assertThat(response.getRejectionReason()).isEqualTo("Term extension too aggressive");
         assertThat(activeLoan.getTermMonths()).isEqualTo(12);
         verify(loanScheduleRepository, never()).save(any());
+    }
+
+    // ── approve/reject: notify the customer of the decision ────────────────────────────
+
+    @Test
+    void approve_notifiesCustomerOfApproval() {
+        Loan pendingLoan = Loan.builder().customerId(4L).loanNo("LN-2")
+                .principal(new BigDecimal("500.00")).status(LoanStatus.PENDING).build();
+        pendingLoan.setId(9L);
+        when(loanRepository.findById(9L)).thenReturn(Optional.of(pendingLoan));
+        CustomerResponse customer = new CustomerResponse();
+        customer.setEmail("dara@example.com");
+        when(customerClient.getById(4L)).thenReturn(ApiResponse.success(customer));
+
+        service.approve(9L);
+
+        ArgumentCaptor<String> subjectCaptor = ArgumentCaptor.forClass(String.class);
+        verify(loanNotifier).notify(any(), subjectCaptor.capture(), any());
+        assertThat(subjectCaptor.getValue()).contains("approved");
+    }
+
+    @Test
+    void reject_notifiesCustomerOfRejection() {
+        Loan pendingLoan = Loan.builder().customerId(4L).loanNo("LN-3")
+                .principal(new BigDecimal("500.00")).status(LoanStatus.PENDING).build();
+        pendingLoan.setId(10L);
+        when(loanRepository.findById(10L)).thenReturn(Optional.of(pendingLoan));
+        CustomerResponse customer = new CustomerResponse();
+        customer.setEmail("dara@example.com");
+        when(customerClient.getById(4L)).thenReturn(ApiResponse.success(customer));
+
+        service.reject(10L);
+
+        ArgumentCaptor<String> subjectCaptor = ArgumentCaptor.forClass(String.class);
+        verify(loanNotifier).notify(any(), subjectCaptor.capture(), any());
+        assertThat(subjectCaptor.getValue()).contains("not approved");
+    }
+
+    // ── addPayment: notifies "payment received", plus "fully paid" when it closes ──────
+
+    @Test
+    void addPayment_notifiesPaymentReceivedOnly_whenLoanStaysActive() {
+        when(loanRepository.findById(7L)).thenReturn(Optional.of(activeLoan));
+        stubNoActiveScheduleAndPaymentPersistence();
+        CustomerResponse customer = new CustomerResponse();
+        customer.setEmail("dara@example.com");
+        when(customerClient.getById(4L)).thenReturn(ApiResponse.success(customer));
+
+        LoanPaymentRequest request = new LoanPaymentRequest();
+        request.setAmount(new BigDecimal("100.00"));
+        request.setPaymentDate(LocalDate.now());
+        request.setMethod(DisbursementMethod.CASH);
+
+        service.addPayment(7L, request);
+
+        assertThat(activeLoan.getStatus()).isEqualTo(LoanStatus.ACTIVE);
+        verify(loanNotifier, times(1)).notify(any(), any(), any());
+    }
+
+    @Test
+    void addPayment_alsoNotifiesFullyPaid_whenPaymentClosesTheLoan() {
+        when(loanRepository.findById(7L)).thenReturn(Optional.of(activeLoan));
+        stubNoActiveScheduleAndPaymentPersistence();
+        CustomerResponse customer = new CustomerResponse();
+        customer.setEmail("dara@example.com");
+        when(customerClient.getById(4L)).thenReturn(ApiResponse.success(customer));
+
+        LoanPaymentRequest request = new LoanPaymentRequest();
+        request.setAmount(activeLoan.getOutstandingBalance());
+        request.setPaymentDate(LocalDate.now());
+        request.setMethod(DisbursementMethod.CASH);
+
+        service.addPayment(7L, request);
+
+        assertThat(activeLoan.getStatus()).isEqualTo(LoanStatus.CLOSED);
+        ArgumentCaptor<String> subjectCaptor = ArgumentCaptor.forClass(String.class);
+        verify(loanNotifier, times(2)).notify(any(), subjectCaptor.capture(), any());
+        assertThat(subjectCaptor.getAllValues()).anySatisfy(s -> assertThat(s).contains("Payment received"));
+        assertThat(subjectCaptor.getAllValues()).anySatisfy(s -> assertThat(s).contains("fully paid"));
     }
 
     // ── disburse: notifies the customer once the loan goes ACTIVE ──────────────────────

@@ -24,6 +24,7 @@ import com.example.loan.dto.LoanInterestRequest;
 import com.example.loan.dto.LoanInterestResponse;
 import com.example.loan.dto.LoanPaymentRequest;
 import com.example.loan.dto.LoanPaymentResponse;
+import com.example.loan.dto.LoanPaymentReversalRejectRequest;
 import com.example.loan.dto.LoanPaymentReverseRequest;
 import com.example.loan.dto.LoanPayoffQuoteResponse;
 import com.example.loan.dto.LoanPayoffRequest;
@@ -351,7 +352,24 @@ public class LoanController {
             @PathVariable Long id, @PathVariable Long paymentId,
             @Valid @RequestBody LoanPaymentReverseRequest request) {
         return ResponseEntity.ok(
-                ApiResponse.success("Payment reversed", loanService.reversePayment(id, paymentId, request)));
+                ApiResponse.success("Reversal requested", loanService.reversePayment(id, paymentId, request)));
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @PutMapping("/{id}/payments/{paymentId}/reverse/approve")
+    public ResponseEntity<ApiResponse<LoanPaymentResponse>> approvePaymentReversal(
+            @PathVariable Long id, @PathVariable Long paymentId) {
+        return ResponseEntity.ok(
+                ApiResponse.success("Reversal approved", loanService.approvePaymentReversal(id, paymentId)));
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @PutMapping("/{id}/payments/{paymentId}/reverse/reject")
+    public ResponseEntity<ApiResponse<LoanPaymentResponse>> rejectPaymentReversal(
+            @PathVariable Long id, @PathVariable Long paymentId,
+            @Valid @RequestBody LoanPaymentReversalRejectRequest request) {
+        return ResponseEntity.ok(
+                ApiResponse.success("Reversal rejected", loanService.rejectPaymentReversal(id, paymentId, request)));
     }
 
     // What it actually costs to close this loan today — see LoanServiceImpl.computePayoffQuote

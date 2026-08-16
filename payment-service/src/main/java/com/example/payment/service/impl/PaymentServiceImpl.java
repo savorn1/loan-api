@@ -11,6 +11,7 @@ import com.example.payment.entity.PaymentStatus;
 import com.example.payment.exception.AppException;
 import com.example.payment.exception.ResourceNotFoundException;
 import com.example.payment.repository.PaymentRepository;
+import com.example.payment.scheduler.PaymentReminderNotifier;
 import com.example.payment.service.PaymentService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
@@ -28,6 +29,7 @@ public class PaymentServiceImpl implements PaymentService {
 
     private final PaymentRepository paymentRepository;
     private final LoanClient loanClient;
+    private final PaymentReminderNotifier reminderNotifier;
 
     @Override
     public PaymentResponse create(PaymentRequest request) {
@@ -72,7 +74,10 @@ public class PaymentServiceImpl implements PaymentService {
         loanClient.applyPayment(payment.getLoanId(), new ApplyPaymentRequest(payment.getAmount()));
         payment.setStatus(PaymentStatus.PAID);
         payment.setPaidAt(LocalDate.now());
-        return toResponse(paymentRepository.save(payment));
+        Payment saved = paymentRepository.save(payment);
+        reminderNotifier.notify(saved, "Payment received",
+                String.format("We received your payment of %s for loan #%d.", saved.getAmount(), saved.getLoanId()));
+        return toResponse(saved);
     }
 
     @Override

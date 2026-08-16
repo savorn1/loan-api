@@ -31,6 +31,7 @@ import com.example.loan.dto.LoanInterestResponse;
 import com.example.loan.dto.LoanPaymentDetailResponse;
 import com.example.loan.dto.LoanPaymentRequest;
 import com.example.loan.dto.LoanPaymentResponse;
+import com.example.loan.dto.LoanPaymentReversalRejectRequest;
 import com.example.loan.dto.LoanPaymentReverseRequest;
 import com.example.loan.dto.LoanPayoffQuoteResponse;
 import com.example.loan.dto.LoanPayoffRequest;
@@ -81,6 +82,7 @@ import com.example.loan.entity.LoanStatus;
 import com.example.loan.entity.LoanStatusHistory;
 import com.example.loan.entity.LoanTransaction;
 import com.example.loan.entity.LoanWriteoff;
+import com.example.loan.entity.PaymentReversalStatus;
 import com.example.loan.entity.PenaltyStatus;
 import com.example.loan.entity.RestructureStatus;
 import com.example.loan.entity.ScheduleInstallmentStatus;
@@ -250,6 +252,9 @@ public class LoanServiceImpl implements LoanService {
         Loan saved = loanRepository.save(loan);
         recordStatusHistory(saved, previousStatus, LoanStatus.APPROVED, null);
         CustomerResponse customer = customerClient.getById(saved.getCustomerId()).getData();
+        loanNotifier.notify(customer, "Your loan application has been approved",
+                String.format("Your loan application %s for %s has been approved.",
+                        saved.getLoanNo(), saved.getPrincipal()));
         return toResponse(saved, customer);
     }
 
@@ -265,6 +270,8 @@ public class LoanServiceImpl implements LoanService {
         Loan saved = loanRepository.save(loan);
         recordStatusHistory(saved, previousStatus, LoanStatus.REJECTED, null);
         CustomerResponse customer = customerClient.getById(saved.getCustomerId()).getData();
+        loanNotifier.notify(customer, "Your loan application was not approved",
+                String.format("Your loan application %s was not approved.", saved.getLoanNo()));
         return toResponse(saved, customer);
     }
 
@@ -825,6 +832,16 @@ public class LoanServiceImpl implements LoanService {
                     request.getPaymentDate(), "LoanPayment", savedPayment.getId(), "Unallocated payment amount");
         }
 
+        CustomerResponse customer = customerClient.getById(savedLoan.getCustomerId()).getData();
+        loanNotifier.notify(customer, "Payment received",
+                String.format("We received your payment of %s for loan %s. New balance: %s.",
+                        savedPayment.getAmount(), savedLoan.getLoanNo(), savedLoan.getOutstandingBalance()));
+        if (closing) {
+            loanNotifier.notify(customer, "Your loan is fully paid",
+                    String.format("Congratulations — loan %s has been paid in full and is now closed.",
+                            savedLoan.getLoanNo()));
+        }
+
         return toPaymentResponse(savedPayment);
     }
 
@@ -837,17 +854,34 @@ public class LoanServiceImpl implements LoanService {
     }
 
     @Override
-    @Transactional
     public LoanPaymentResponse reversePayment(Long id, Long paymentId, LoanPaymentReverseRequest request) {
         LoanPayment payment = findPaymentOrThrow(id, paymentId);
-        if (payment.isReversed()) {
-            throw new AppException(HttpStatus.CONFLICT, "Payment is already reversed");
+        if (payment.getReversalStatus() != null) {
+            throw new AppException(HttpStatus.CONFLICT, "A reversal has already been requested for this payment");
         }
+
+        // Just records the request — see approvePaymentReversal for where the schedule/
+        // balance actually get restored (maker-checker: requester and approver must differ).
+        payment.setReversalStatus(PaymentReversalStatus.PENDING_APPROVAL);
+        payment.setReversalReason(request.getReason());
+        payment.setReversalRequestedBy(currentUsername());
+        payment.setReversalRequestedAt(LocalDateTime.now());
+        return toPaymentResponse(loanPaymentRepository.save(payment));
+    }
+
+    @Override
+    @Transactional
+    public LoanPaymentResponse approvePaymentReversal(Long id, Long paymentId) {
+        LoanPayment payment = findPaymentOrThrow(id, paymentId);
+        if (payment.getReversalStatus() != PaymentReversalStatus.PENDING_APPROVAL) {
+            throw new AppException(HttpStatus.CONFLICT, "Only a PENDING_APPROVAL reversal can be approved");
+        }
+        assertDifferentFromCreator(payment, "approve");
         Loan loan = payment.getLoan();
 
-        payment.setReversed(true);
-        payment.setReversedAt(LocalDateTime.now());
-        payment.setReversalReason(request.getReason());
+        payment.setReversalStatus(PaymentReversalStatus.APPROVED);
+        payment.setReversalReviewedBy(currentUsername());
+        payment.setReversalReviewedAt(LocalDateTime.now());
         LoanPayment savedPayment = loanPaymentRepository.save(payment);
 
         // Re-derive each affected installment's paid-to-date total from its remaining
@@ -900,10 +934,31 @@ public class LoanServiceImpl implements LoanService {
         }
         if (restoreAmount.compareTo(BigDecimal.ZERO) > 0) {
             recordTransaction(savedLoan, TransactionType.ADJUSTMENT, restoreAmount, LocalDate.now(),
-                    "LoanPayment", savedPayment.getId(), "Reversal: " + request.getReason());
+                    "LoanPayment", savedPayment.getId(), "Reversal: " + payment.getReversalReason());
         }
 
         return toPaymentResponse(savedPayment);
+    }
+
+    @Override
+    public LoanPaymentResponse rejectPaymentReversal(Long id, Long paymentId, LoanPaymentReversalRejectRequest request) {
+        LoanPayment payment = findPaymentOrThrow(id, paymentId);
+        if (payment.getReversalStatus() != PaymentReversalStatus.PENDING_APPROVAL) {
+            throw new AppException(HttpStatus.CONFLICT, "Only a PENDING_APPROVAL reversal can be rejected");
+        }
+        assertDifferentFromCreator(payment, "reject");
+
+        payment.setReversalStatus(PaymentReversalStatus.REJECTED);
+        payment.setReversalReviewedBy(currentUsername());
+        payment.setReversalReviewedAt(LocalDateTime.now());
+        payment.setReversalRejectionReason(request.getReason());
+        return toPaymentResponse(loanPaymentRepository.save(payment));
+    }
+
+    private void assertDifferentFromCreator(LoanPayment payment, String action) {
+        if (currentUsername().equals(payment.getReversalRequestedBy())) {
+            throw new AppException(HttpStatus.CONFLICT, "Cannot " + action + " a reversal you requested");
+        }
     }
 
     private LoanPayment findPaymentOrThrow(Long loanId, Long paymentId) {
@@ -1849,9 +1904,13 @@ public class LoanServiceImpl implements LoanService {
                 .method(payment.getMethod())
                 .reference(payment.getReference())
                 .allocations(allocations)
-                .reversed(payment.isReversed())
-                .reversedAt(payment.getReversedAt())
+                .reversalStatus(payment.getReversalStatus())
                 .reversalReason(payment.getReversalReason())
+                .reversalRequestedBy(payment.getReversalRequestedBy())
+                .reversalRequestedAt(payment.getReversalRequestedAt())
+                .reversalReviewedBy(payment.getReversalReviewedBy())
+                .reversalReviewedAt(payment.getReversalReviewedAt())
+                .reversalRejectionReason(payment.getReversalRejectionReason())
                 .createdAt(payment.getCreatedAt())
                 .updatedAt(payment.getUpdatedAt())
                 .build();
@@ -1994,6 +2053,8 @@ public class LoanServiceImpl implements LoanService {
                 .status(penalty.getStatus())
                 .waivedAt(penalty.getWaivedAt())
                 .paidAt(penalty.getPaidAt())
+                .scheduleInstallmentId(
+                        penalty.getScheduleInstallment() != null ? penalty.getScheduleInstallment().getId() : null)
                 .createdAt(penalty.getCreatedAt())
                 .updatedAt(penalty.getUpdatedAt())
                 .build();

@@ -8,4 +8,8 @@ import java.util.List;
 public interface LoanPenaltyRepository extends JpaRepository<LoanPenalty, Long> {
 
     List<LoanPenalty> findByLoanIdOrderByAppliedDateAsc(Long loanId);
+
+    // Used by OverdueInstallmentScheduler to avoid auto-charging the same
+    // installment twice across separate runs.
+    boolean existsByScheduleInstallmentId(Long scheduleInstallmentId);
 }

@@ -45,4 +45,12 @@ public class LoanPenalty extends BaseEntity {
 
     @Column(name = "paid_at")
     private LocalDateTime paidAt;
+
+    // Set only for penalties OverdueInstallmentScheduler auto-charged — null for
+    // anything added through addPenalty. Lets the scheduler check "has this
+    // installment already been auto-penalized" without re-charging it every run
+    // for as long as it stays overdue.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "schedule_installment_id")
+    private LoanScheduleInstallment scheduleInstallment;
 }

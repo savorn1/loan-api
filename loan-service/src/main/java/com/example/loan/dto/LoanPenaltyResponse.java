@@ -20,6 +20,8 @@ public class LoanPenaltyResponse {
     private PenaltyStatus status;
     private LocalDateTime waivedAt;
     private LocalDateTime paidAt;
+    // Non-null only for penalties OverdueInstallmentScheduler auto-charged.
+    private Long scheduleInstallmentId;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

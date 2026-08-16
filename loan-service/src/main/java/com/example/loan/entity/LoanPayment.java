@@ -53,13 +53,36 @@ public class LoanPayment extends BaseEntity {
 
     private String reference;
 
-    @Column(nullable = false)
-    @Builder.Default
-    private boolean reversed = false;
-
-    @Column(name = "reversed_at")
-    private LocalDateTime reversedAt;
+    // Maker-checker, same shape as LoanRestructure: reversePayment (maker) only sets
+    // status/reason/requestedBy/requestedAt; approvePaymentReversal (checker, a
+    // different admin — see LoanServiceImpl.assertDifferentFromCreator) is what
+    // actually restores the schedule/balance. Null means no reversal was ever requested.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "reversal_status")
+    private PaymentReversalStatus reversalStatus;
 
     @Column(name = "reversal_reason")
     private String reversalReason;
+
+    @Column(name = "reversal_requested_by")
+    private String reversalRequestedBy;
+
+    @Column(name = "reversal_requested_at")
+    private LocalDateTime reversalRequestedAt;
+
+    @Column(name = "reversal_reviewed_by")
+    private String reversalReviewedBy;
+
+    @Column(name = "reversal_reviewed_at")
+    private LocalDateTime reversalReviewedAt;
+
+    @Column(name = "reversal_rejection_reason")
+    private String reversalRejectionReason;
+
+    // Derived rather than its own column — APPROVED is the only status that actually
+    // reversed anything, so this is the single check every other computation
+    // (allocatePayment's paid-so-far filter, outstandingBalance restoration) relies on.
+    public boolean isReversed() {
+        return reversalStatus == PaymentReversalStatus.APPROVED;
+    }
 }

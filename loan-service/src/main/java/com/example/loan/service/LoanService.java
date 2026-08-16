@@ -23,6 +23,7 @@ import com.example.loan.dto.LoanInterestRequest;
 import com.example.loan.dto.LoanInterestResponse;
 import com.example.loan.dto.LoanPaymentRequest;
 import com.example.loan.dto.LoanPaymentResponse;
+import com.example.loan.dto.LoanPaymentReversalRejectRequest;
 import com.example.loan.dto.LoanPaymentReverseRequest;
 import com.example.loan.dto.LoanPayoffQuoteResponse;
 import com.example.loan.dto.LoanPayoffRequest;
@@ -134,6 +135,10 @@ public interface LoanService {
     List<LoanPaymentResponse> getPayments(Long id);
 
     LoanPaymentResponse reversePayment(Long id, Long paymentId, LoanPaymentReverseRequest request);
+
+    LoanPaymentResponse approvePaymentReversal(Long id, Long paymentId);
+
+    LoanPaymentResponse rejectPaymentReversal(Long id, Long paymentId, LoanPaymentReversalRejectRequest request);
 
     LoanPayoffQuoteResponse getPayoffQuote(Long id);
 

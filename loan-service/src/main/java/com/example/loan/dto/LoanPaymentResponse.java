@@ -1,6 +1,7 @@
 package com.example.loan.dto;
 
 import com.example.loan.entity.DisbursementMethod;
+import com.example.loan.entity.PaymentReversalStatus;
 import lombok.Builder;
 import lombok.Data;
 
@@ -21,9 +22,13 @@ public class LoanPaymentResponse {
     private DisbursementMethod method;
     private String reference;
     private List<LoanPaymentDetailResponse> allocations;
-    private boolean reversed;
-    private LocalDateTime reversedAt;
+    private PaymentReversalStatus reversalStatus;
     private String reversalReason;
+    private String reversalRequestedBy;
+    private LocalDateTime reversalRequestedAt;
+    private String reversalReviewedBy;
+    private LocalDateTime reversalReviewedAt;
+    private String reversalRejectionReason;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

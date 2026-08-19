@@ -30,6 +30,11 @@ public class Payment extends BaseEntity {
 
     private LocalDate paidAt;
 
+    // Who called markAsPaid — null until then. See PaymentStatusHistory for the
+    // full transition trail; this is just a quick "who paid this" convenience field.
+    @Column(name = "paid_by")
+    private String paidBy;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     @Builder.Default

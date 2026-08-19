@@ -6,11 +6,14 @@ import com.example.payment.dto.ApplyPaymentRequest;
 import com.example.payment.dto.GenerateScheduleRequest;
 import com.example.payment.dto.PaymentRequest;
 import com.example.payment.dto.PaymentResponse;
+import com.example.payment.dto.PaymentStatusHistoryResponse;
 import com.example.payment.entity.Payment;
 import com.example.payment.entity.PaymentStatus;
+import com.example.payment.entity.PaymentStatusHistory;
 import com.example.payment.exception.AppException;
 import com.example.payment.exception.ResourceNotFoundException;
 import com.example.payment.repository.PaymentRepository;
+import com.example.payment.repository.PaymentStatusHistoryRepository;
 import com.example.payment.scheduler.PaymentReminderNotifier;
 import com.example.payment.service.PaymentService;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +31,7 @@ import java.util.List;
 public class PaymentServiceImpl implements PaymentService {
 
     private final PaymentRepository paymentRepository;
+    private final PaymentStatusHistoryRepository paymentStatusHistoryRepository;
     private final LoanClient loanClient;
     private final PaymentReminderNotifier reminderNotifier;
 
@@ -66,18 +70,40 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     @Override
-    public PaymentResponse markAsPaid(Long id) {
+    public PaymentResponse markAsPaid(Long id, String changedBy) {
         Payment payment = findOrThrow(id);
         if (payment.getStatus() == PaymentStatus.PAID) {
             throw new AppException(HttpStatus.CONFLICT, "Payment is already marked as PAID");
         }
+        PaymentStatus fromStatus = payment.getStatus();
+        // loan-service's applyPayment() records this in the payment-transactions ledger
+        // itself (see LoanServiceImpl.applyPayment) — it's the one chokepoint shared by
+        // this call and the loan's own "Apply payment to balance" action, so doing it
+        // here too would double-book the same repayment.
         loanClient.applyPayment(payment.getLoanId(), new ApplyPaymentRequest(payment.getAmount()));
         payment.setStatus(PaymentStatus.PAID);
         payment.setPaidAt(LocalDate.now());
+        payment.setPaidBy(changedBy);
         Payment saved = paymentRepository.save(payment);
+
+        paymentStatusHistoryRepository.save(PaymentStatusHistory.builder()
+                .payment(saved)
+                .fromStatus(fromStatus)
+                .toStatus(PaymentStatus.PAID)
+                .changedBy(changedBy)
+                .build());
+
         reminderNotifier.notify(saved, "Payment received",
                 String.format("We received your payment of %s for loan #%d.", saved.getAmount(), saved.getLoanId()));
         return toResponse(saved);
+    }
+
+    @Override
+    public List<PaymentStatusHistoryResponse> getStatusHistory(Long id) {
+        findOrThrow(id);
+        return paymentStatusHistoryRepository.findByPaymentIdOrderByCreatedAtDesc(id).stream()
+                .map(this::toStatusHistoryResponse)
+                .toList();
     }
 
     @Override
@@ -116,6 +142,7 @@ public class PaymentServiceImpl implements PaymentService {
                 .amount(payment.getAmount())
                 .dueDate(payment.getDueDate())
                 .paidAt(payment.getPaidAt())
+                .paidBy(payment.getPaidBy())
                 .status(payment.getStatus())
                 .note(payment.getNote())
                 .installmentNumber(payment.getInstallmentNumber())
@@ -123,6 +150,18 @@ public class PaymentServiceImpl implements PaymentService {
                 .interestComponent(payment.getInterestComponent())
                 .createdAt(payment.getCreatedAt())
                 .updatedAt(payment.getUpdatedAt())
+                .build();
+    }
+
+    private PaymentStatusHistoryResponse toStatusHistoryResponse(PaymentStatusHistory history) {
+        return PaymentStatusHistoryResponse.builder()
+                .id(history.getId())
+                .paymentId(history.getPayment().getId())
+                .fromStatus(history.getFromStatus())
+                .toStatus(history.getToStatus())
+                .changedBy(history.getChangedBy())
+                .note(history.getNote())
+                .changedAt(history.getCreatedAt())
                 .build();
     }
 }

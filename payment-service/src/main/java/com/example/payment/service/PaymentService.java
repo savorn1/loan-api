@@ -4,6 +4,7 @@ import com.example.payment.common.PageResponse;
 import com.example.payment.dto.GenerateScheduleRequest;
 import com.example.payment.dto.PaymentRequest;
 import com.example.payment.dto.PaymentResponse;
+import com.example.payment.dto.PaymentStatusHistoryResponse;
 
 import java.util.List;
 
@@ -17,7 +18,9 @@ public interface PaymentService {
 
     List<PaymentResponse> getByLoan(Long loanId);
 
-    PaymentResponse markAsPaid(Long id);
+    PaymentResponse markAsPaid(Long id, String changedBy);
+
+    List<PaymentStatusHistoryResponse> getStatusHistory(Long id);
 
     List<PaymentResponse> createSchedule(GenerateScheduleRequest request);
 

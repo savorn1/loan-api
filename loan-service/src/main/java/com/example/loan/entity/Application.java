@@ -2,6 +2,7 @@ package com.example.loan.entity;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -47,6 +48,14 @@ public class Application extends BaseEntity {
     // Copied from the customer's branchId at creation (see ApplicationServiceImpl.create)
     // — raw cross-service id, no FK, same unvalidated convention as customerId.
     private Long branchId;
+
+    // Cross-service id (loan-product-service) — populated at submission and validated
+    // against the product's amount/term range in ApplicationServiceImpl.create()/update().
+    // Nullable because ddl-auto=update can't add a NOT NULL column to a table that already
+    // has rows (same reasoning as applicationNo above); required-ness is instead enforced
+    // by ApplicationRequest.loanProductId's @NotNull.
+    @Column(name = "loan_product_id")
+    private UUID loanProductId;
 
     @Column(name = "requested_amount", nullable = false, precision = 15, scale = 2)
     private BigDecimal requestedAmount;

@@ -19,6 +19,12 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
 
     List<Payment> findByDueDateBeforeAndStatus(LocalDate date, PaymentStatus status);
 
+    // Same predicate OverdueScheduler flips PENDING -> OVERDUE with, but excluding
+    // only PAID rather than matching PENDING specifically — so it also picks up rows
+    // already flagged OVERDUE, giving a complete "overdue right now" view computed
+    // live instead of depending on that nightly job having already run.
+    List<Payment> findByDueDateBeforeAndStatusNot(LocalDate date, PaymentStatus status);
+
     List<Payment> findByDueDateAndStatus(LocalDate date, PaymentStatus status);
 
     List<Payment> findByStatusAndAmountGreaterThanEqualAndPaidAtGreaterThanEqualOrderByAmountDesc(

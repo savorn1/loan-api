@@ -58,6 +58,16 @@ public class PaymentTransaction extends BaseEntity {
     @Column(nullable = false, precision = 15, scale = 2)
     private BigDecimal amount;
 
+    // Optional breakdown of `amount` for a LOAN_PAYMENT transaction — how much of it
+    // is principal vs. interest. Nullable: the split isn't always known up front (e.g.
+    // before the loan side has allocated the payment), and this is metadata on the
+    // transaction, not something this service enforces sums against `amount`.
+    @Column(name = "principal_amount", precision = 15, scale = 2)
+    private BigDecimal principalAmount;
+
+    @Column(name = "interest_amount", precision = 15, scale = 2)
+    private BigDecimal interestAmount;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     @Builder.Default
@@ -68,4 +78,18 @@ public class PaymentTransaction extends BaseEntity {
 
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
+
+    // Set only on the SUCCESS -> REFUNDED transition. Note this only reverses this
+    // transaction's own status/attribution — it does NOT undo whatever it settled.
+    // referenceType/referenceId on PaymentTransactionItem are free-form strings the
+    // caller supplies (not a governed enum/registry), so there's no reliable way to
+    // dispatch a reversal call back to the right service/entity generically.
+    @Column(name = "refunded_by")
+    private String refundedBy;
+
+    @Column(name = "refunded_at")
+    private LocalDateTime refundedAt;
+
+    @Column(name = "refund_reason")
+    private String refundReason;
 }

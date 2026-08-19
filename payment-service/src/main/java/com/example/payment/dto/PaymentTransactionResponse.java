@@ -19,6 +19,10 @@ public class PaymentTransactionResponse {
     private String customerName;
     private Long paymentMethodId;
     private String paymentMethodName;
+    // Lets the frontend tell an auto-booked internal transaction (see
+    // PaymentTransactionDefaultsSeeder.INTERNAL_METHOD_CODE) apart from one that went
+    // through a real gateway, without hardcoding the method's display name.
+    private String paymentMethodCode;
     private Long paymentChannelId;
     private String paymentChannelName;
     private Long paymentGatewayId;
@@ -27,8 +31,13 @@ public class PaymentTransactionResponse {
     private String businessReference;
     private String currency;
     private BigDecimal amount;
+    private BigDecimal principalAmount;
+    private BigDecimal interestAmount;
     private TransactionStatus status;
     private LocalDateTime requestedAt;
     private LocalDateTime completedAt;
+    private String refundedBy;
+    private LocalDateTime refundedAt;
+    private String refundReason;
     private List<PaymentTransactionItemResponse> items;
 }

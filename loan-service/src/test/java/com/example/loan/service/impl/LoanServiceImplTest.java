@@ -2,6 +2,7 @@ package com.example.loan.service.impl;
 
 import com.example.loan.client.AccountingClient;
 import com.example.loan.client.CustomerClient;
+import com.example.loan.client.LoanProductClient;
 import com.example.loan.client.PaymentClient;
 import com.example.loan.common.ApiResponse;
 import com.example.loan.dto.ApplyPaymentRequest;
@@ -81,6 +82,7 @@ class LoanServiceImplTest {
 
     @Mock private LoanRepository loanRepository;
     @Mock private CustomerClient customerClient;
+    @Mock private LoanProductClient loanProductClient;
     @Mock private PaymentClient paymentClient;
     @Mock private AccountingClient accountingClient;
     @Mock private LoanStatusHistoryRepository loanStatusHistoryRepository;
@@ -111,7 +113,7 @@ class LoanServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        service = new LoanServiceImpl(loanRepository, customerClient, paymentClient, accountingClient,
+        service = new LoanServiceImpl(loanRepository, customerClient, loanProductClient, paymentClient, accountingClient,
                 loanStatusHistoryRepository, loanDisbursementRepository, loanGuarantorRepository,
                 loanCollateralRepository, loanDocumentRepository, loanNoteRepository, loanScheduleRepository,
                 loanScheduleInstallmentRepository, loanPaymentRepository, loanPaymentDetailRepository,

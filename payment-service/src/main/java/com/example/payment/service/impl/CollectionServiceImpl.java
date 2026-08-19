@@ -54,7 +54,19 @@ public class CollectionServiceImpl implements CollectionService {
     public List<CollectionWorkqueueItemResponse> getWorkqueue(CollectionBucket bucket, Long assignedToUserId) {
         Map<Long, List<Payment>> overdueByLoan = paymentRepository.findByStatus(PaymentStatus.OVERDUE).stream()
                 .collect(Collectors.groupingBy(Payment::getLoanId));
+        return buildWorkqueue(overdueByLoan, bucket, assignedToUserId);
+    }
 
+    @Override
+    public List<CollectionWorkqueueItemResponse> getLiveOverdueLoans(CollectionBucket bucket, Long assignedToUserId) {
+        Map<Long, List<Payment>> overdueByLoan = paymentRepository
+                .findByDueDateBeforeAndStatusNot(LocalDate.now(), PaymentStatus.PAID).stream()
+                .collect(Collectors.groupingBy(Payment::getLoanId));
+        return buildWorkqueue(overdueByLoan, bucket, assignedToUserId);
+    }
+
+    private List<CollectionWorkqueueItemResponse> buildWorkqueue(
+            Map<Long, List<Payment>> overdueByLoan, CollectionBucket bucket, Long assignedToUserId) {
         LocalDate today = LocalDate.now();
         List<CollectionWorkqueueItemResponse> items = new ArrayList<>();
 

@@ -1,5 +1,6 @@
 package com.example.auth.controller;
 
+import com.example.auth.annotation.RateLimit;
 import com.example.auth.dto.ApiResponse;
 import com.example.auth.dto.AuthResponse;
 import com.example.auth.dto.ChangePasswordRequest;
@@ -18,6 +19,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -32,12 +34,19 @@ public class AuthController {
     private final AuthService authService;
     private final JwtService jwtService;
 
+    // Not public — see AuthenticationFilter.PUBLIC_PATHS in api-gateway, which no longer
+    // lets anonymous requests reach this at all. This check is defense-in-depth for a
+    // request that reaches auth-service directly, bypassing the gateway.
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/register")
     public ResponseEntity<ApiResponse<AuthResponse>> register(@Valid @RequestBody RegisterRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("Registered successfully", authService.register(request)));
     }
 
+    // 5 attempts per minute per IP — previously unthrottled, so scripted password
+    // guessing against a known username had no cost at all.
+    @RateLimit(max = 5, window = 60)
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<AuthResponse>> login(@Valid @RequestBody LoginRequest request) {
         return ResponseEntity.ok(ApiResponse.success(authService.login(request)));

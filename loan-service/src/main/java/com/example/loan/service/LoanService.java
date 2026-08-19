@@ -50,6 +50,7 @@ import com.example.loan.dto.LoanWriteoffResponse;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.UUID;
 
 public interface LoanService {
 
@@ -60,7 +61,7 @@ public interface LoanService {
     LoanResponse getById(Long id);
 
     PageResponse<LoanResponse> getAll(int page, int size, String sortBy, String sortOrder,
-                                       Long customerId, Long branchId,
+                                       Long customerId, Long branchId, UUID loanProductId,
                                        BigDecimal minPrincipal, BigDecimal maxPrincipal,
                                        LocalDate dateFrom, LocalDate dateTo);
 

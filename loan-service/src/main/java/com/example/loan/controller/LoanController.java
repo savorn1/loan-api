@@ -59,6 +59,7 @@ import org.springframework.web.bind.annotation.*;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/loans")
@@ -93,12 +94,13 @@ public class LoanController {
             @RequestParam(defaultValue = "desc") String sortOrder,
             @RequestParam(required = false) Long customerId,
             @RequestParam(required = false) Long branchId,
+            @RequestParam(required = false) UUID loanProductId,
             @RequestParam(required = false) BigDecimal minPrincipal,
             @RequestParam(required = false) BigDecimal maxPrincipal,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo) {
         return ResponseEntity.ok(loanService.getAll(page, size, sortBy, sortOrder,
-                customerId, branchId, minPrincipal, maxPrincipal, dateFrom, dateTo));
+                customerId, branchId, loanProductId, minPrincipal, maxPrincipal, dateFrom, dateTo));
     }
 
     @GetMapping("/customer/{customerId}")

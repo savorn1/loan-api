@@ -3,6 +3,7 @@ package com.example.loan.entity;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -46,6 +47,12 @@ public class Loan extends BaseEntity {
     private Long customerId;
 
     private Long branchId;
+
+    // Copied from Application.loanProductId when an approval creates this Loan (see
+    // ApplicationServiceImpl.addApproval()). Nullable for the same ddl-auto=update reason
+    // as loanNo above.
+    @Column(name = "loan_product_id")
+    private UUID loanProductId;
 
     @Column(nullable = false, precision = 15, scale = 2)
     private BigDecimal principal;

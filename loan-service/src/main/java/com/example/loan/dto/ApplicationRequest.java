@@ -4,12 +4,16 @@ import jakarta.validation.constraints.*;
 import lombok.Data;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 
 @Data
 public class ApplicationRequest {
 
     @NotNull
     private Long customerId;
+
+    @NotNull
+    private UUID loanProductId;
 
     @NotNull
     @DecimalMin("1000.00")

@@ -17,6 +17,7 @@ public class PaymentResponse {
     private BigDecimal amount;
     private LocalDate dueDate;
     private LocalDate paidAt;
+    private String paidBy;
     private PaymentStatus status;
     private String note;
     private Integer installmentNumber;

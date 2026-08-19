@@ -2,6 +2,7 @@ package com.example.loan.service.impl;
 
 import com.example.loan.client.AccountingClient;
 import com.example.loan.client.CustomerClient;
+import com.example.loan.client.LoanProductClient;
 import com.example.loan.client.PaymentClient;
 import com.example.loan.common.PageResponse;
 import com.example.loan.dto.ApplyPaymentRequest;
@@ -39,6 +40,7 @@ import com.example.loan.dto.LoanPenaltyRequest;
 import com.example.loan.dto.LoanPenaltyResponse;
 import com.example.loan.dto.LoanRefinanceRequest;
 import com.example.loan.dto.LoanRefinanceResponse;
+import com.example.loan.dto.LoanRepaymentTransactionRequest;
 import com.example.loan.dto.LoanRequest;
 import com.example.loan.dto.LoanResponse;
 import com.example.loan.dto.LoanRestructureRejectRequest;
@@ -137,6 +139,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -144,6 +147,7 @@ public class LoanServiceImpl implements LoanService {
 
     private final LoanRepository loanRepository;
     private final CustomerClient customerClient;
+    private final LoanProductClient loanProductClient;
     private final PaymentClient paymentClient;
     private final AccountingClient accountingClient;
     private final LoanStatusHistoryRepository loanStatusHistoryRepository;
@@ -199,7 +203,7 @@ public class LoanServiceImpl implements LoanService {
 
     @Override
     public PageResponse<LoanResponse> getAll(int page, int size, String sortBy, String sortOrder,
-                                              Long customerId, Long branchId,
+                                              Long customerId, Long branchId, UUID loanProductId,
                                               BigDecimal minPrincipal, BigDecimal maxPrincipal,
                                               LocalDate dateFrom, LocalDate dateTo) {
         Sort sort = "asc".equalsIgnoreCase(sortOrder)
@@ -213,6 +217,9 @@ public class LoanServiceImpl implements LoanService {
             }
             if (branchId != null) {
                 predicates.add(cb.equal(root.get("branchId"), branchId));
+            }
+            if (loanProductId != null) {
+                predicates.add(cb.equal(root.get("loanProductId"), loanProductId));
             }
             if (minPrincipal != null) {
                 predicates.add(cb.greaterThanOrEqualTo(root.get("principal"), minPrincipal));
@@ -337,12 +344,13 @@ public class LoanServiceImpl implements LoanService {
         }
         LocalDate paymentDate = LocalDate.now();
 
-        // Callers of this action (payment-service's markAsPaid) only ever have an amount,
-        // not a channel — DisbursementMethod.OTHER records that honestly instead of
-        // guessing. Still creates a real LoanPayment/LoanPaymentDetail trail and allocates
-        // against the schedule via allocatePayment, same as addPayment, instead of dumping
-        // the whole amount as PRINCIPAL_PAYMENT: a payment that's mostly interest was
-        // otherwise posted entirely to principal, understating interest income.
+        // Callers of this action — payment-service's markAsPaid, or the loan's own "Apply
+        // payment to balance" action — only ever have an amount, not a channel;
+        // DisbursementMethod.OTHER records that honestly instead of guessing. Still creates
+        // a real LoanPayment/LoanPaymentDetail trail and allocates against the schedule via
+        // allocatePayment, same as addPayment, instead of dumping the whole amount as
+        // PRINCIPAL_PAYMENT: a payment that's mostly interest was otherwise posted entirely
+        // to principal, understating interest income.
         LoanPayment payment = LoanPayment.builder()
                 .loan(loan)
                 .amount(request.getAmount())
@@ -397,6 +405,11 @@ public class LoanServiceImpl implements LoanService {
         }
 
         CustomerResponse customer = customerClient.getById(saved.getCustomerId()).getData();
+        paymentClient.createLoanRepaymentTransaction(LoanRepaymentTransactionRequest.builder()
+                .customerId(saved.getCustomerId())
+                .loanId(saved.getId())
+                .amount(request.getAmount())
+                .build());
         return toResponse(saved, customer);
     }
 
@@ -841,6 +854,12 @@ public class LoanServiceImpl implements LoanService {
                     String.format("Congratulations — loan %s has been paid in full and is now closed.",
                             savedLoan.getLoanNo()));
         }
+
+        paymentClient.createLoanRepaymentTransaction(LoanRepaymentTransactionRequest.builder()
+                .customerId(savedLoan.getCustomerId())
+                .loanId(savedLoan.getId())
+                .amount(request.getAmount())
+                .build());
 
         return toPaymentResponse(savedPayment);
     }
@@ -1950,6 +1969,9 @@ public class LoanServiceImpl implements LoanService {
     }
 
     private LoanResponse toResponse(Loan loan, CustomerResponse customer) {
+        String loanProductName = loan.getLoanProductId() != null
+                ? loanProductClient.getById(loan.getLoanProductId()).getData().getName()
+                : null;
         return LoanResponse.builder()
                 .id(loan.getId())
                 .loanNo(loan.getLoanNo())
@@ -1958,6 +1980,8 @@ public class LoanServiceImpl implements LoanService {
                 .customerName(customer != null
                         ? customer.getFirstName() + " " + customer.getLastName()
                         : null)
+                .loanProductId(loan.getLoanProductId())
+                .loanProductName(loanProductName)
                 .principal(loan.getPrincipal())
                 .interestRate(loan.getInterestRate())
                 .termMonths(loan.getTermMonths())

@@ -1,6 +1,7 @@
 package com.example.loan.service.impl;
 
 import com.example.loan.client.CustomerClient;
+import com.example.loan.client.LoanProductClient;
 import com.example.loan.common.PageResponse;
 import com.example.loan.dto.ApplicationApprovalRequest;
 import com.example.loan.dto.ApplicationApprovalResponse;
@@ -11,6 +12,7 @@ import com.example.loan.dto.ApplicationNoteResponse;
 import com.example.loan.dto.ApplicationRequest;
 import com.example.loan.dto.ApplicationResponse;
 import com.example.loan.dto.CustomerResponse;
+import com.example.loan.dto.LoanProductResponse;
 import com.example.loan.entity.Application;
 import com.example.loan.entity.ApplicationApproval;
 import com.example.loan.entity.ApplicationDocument;
@@ -41,9 +43,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -55,16 +59,20 @@ public class ApplicationServiceImpl implements ApplicationService {
     private final ApplicationApprovalRepository applicationApprovalRepository;
     private final LoanRepository loanRepository;
     private final CustomerClient customerClient;
+    private final LoanProductClient loanProductClient;
     private final FileStorageService fileStorageService;
 
     @Override
     @Transactional
     public ApplicationResponse create(ApplicationRequest request) {
         CustomerResponse customer = customerClient.getById(request.getCustomerId()).getData();
+        LoanProductResponse product = resolveAndValidateProduct(
+                request.getLoanProductId(), request.getRequestedAmount(), request.getRequestedTermMonths());
 
         Application application = Application.builder()
                 .customerId(request.getCustomerId())
                 .branchId(customer != null ? customer.getBranchId() : null)
+                .loanProductId(request.getLoanProductId())
                 .requestedAmount(request.getRequestedAmount())
                 .requestedTermMonths(request.getRequestedTermMonths())
                 .purpose(request.getPurpose())
@@ -77,7 +85,29 @@ public class ApplicationServiceImpl implements ApplicationService {
         applicationRepository.updateApplicationNo(application.getId(), applicationNo);
         application.setApplicationNo(applicationNo);
 
-        return toResponse(application, customer);
+        return toResponse(application, customer, product);
+    }
+
+    // Fetches the product and enforces that it's PUBLISHED and that the requested
+    // amount/term fall within its range — the actual point of linking an application to
+    // a product, unlike Group.loanProductId which carries the id unvalidated.
+    private LoanProductResponse resolveAndValidateProduct(UUID loanProductId, BigDecimal requestedAmount, Integer requestedTermMonths) {
+        LoanProductResponse product = loanProductClient.getById(loanProductId).getData();
+        if (product == null) {
+            throw new ResourceNotFoundException("Loan product", loanProductId);
+        }
+        if (!"PUBLISHED".equals(product.getStatus())) {
+            throw new AppException(HttpStatus.BAD_REQUEST, "Loan product is not published and cannot be applied against");
+        }
+        if (requestedAmount.compareTo(product.getMinAmount()) < 0 || requestedAmount.compareTo(product.getMaxAmount()) > 0) {
+            throw new AppException(HttpStatus.BAD_REQUEST,
+                    "requestedAmount must be between " + product.getMinAmount() + " and " + product.getMaxAmount() + " for the selected loan product");
+        }
+        if (requestedTermMonths < product.getMinTerm() || requestedTermMonths > product.getMaxTerm()) {
+            throw new AppException(HttpStatus.BAD_REQUEST,
+                    "requestedTermMonths must be between " + product.getMinTerm() + " and " + product.getMaxTerm() + " for the selected loan product");
+        }
+        return product;
     }
 
     @Override
@@ -110,11 +140,14 @@ public class ApplicationServiceImpl implements ApplicationService {
         if (application.getStatus() != ApplicationStatus.SUBMITTED) {
             throw new AppException(HttpStatus.CONFLICT, "Only SUBMITTED applications can be edited");
         }
+        LoanProductResponse product = resolveAndValidateProduct(
+                request.getLoanProductId(), request.getRequestedAmount(), request.getRequestedTermMonths());
+        application.setLoanProductId(request.getLoanProductId());
         application.setRequestedAmount(request.getRequestedAmount());
         application.setRequestedTermMonths(request.getRequestedTermMonths());
         application.setPurpose(request.getPurpose());
         CustomerResponse customer = customerClient.getById(application.getCustomerId()).getData();
-        return toResponse(applicationRepository.save(application), customer);
+        return toResponse(applicationRepository.save(application), customer, product);
     }
 
     @Override
@@ -250,6 +283,7 @@ public class ApplicationServiceImpl implements ApplicationService {
             Loan loan = Loan.builder()
                     .customerId(application.getCustomerId())
                     .branchId(application.getBranchId())
+                    .loanProductId(application.getLoanProductId())
                     .principal(request.getApprovedAmount())
                     .interestRate(request.getApprovedInterestRate())
                     .termMonths(request.getApprovedTermMonths())
@@ -328,7 +362,19 @@ public class ApplicationServiceImpl implements ApplicationService {
                 .build();
     }
 
+    // Read paths (getById/getAll/getByCustomer/addApproval) don't already have the
+    // product in hand, so look it up here — same one-Feign-call-per-row enrichment
+    // GroupServiceImpl.toResponse() already does for groups.
     private ApplicationResponse toResponse(Application application, CustomerResponse customer) {
+        LoanProductResponse product = application.getLoanProductId() != null
+                ? loanProductClient.getById(application.getLoanProductId()).getData()
+                : null;
+        return toResponse(application, customer, product);
+    }
+
+    // create()/update() already fetched the product to validate against it, so they use
+    // this overload directly to avoid a redundant Feign round trip.
+    private ApplicationResponse toResponse(Application application, CustomerResponse customer, LoanProductResponse product) {
         List<ApplicationDocumentResponse> documents = applicationDocumentRepository
                 .findByApplicationIdOrderByUploadedAtAsc(application.getId()).stream()
                 .map(this::toDocumentResponse)
@@ -348,6 +394,8 @@ public class ApplicationServiceImpl implements ApplicationService {
                 .customerId(application.getCustomerId())
                 .branchId(application.getBranchId())
                 .customerName(customer != null ? customer.getFirstName() + " " + customer.getLastName() : null)
+                .loanProductId(application.getLoanProductId())
+                .loanProductName(product != null ? product.getName() : null)
                 .requestedAmount(application.getRequestedAmount())
                 .requestedTermMonths(application.getRequestedTermMonths())
                 .purpose(application.getPurpose())

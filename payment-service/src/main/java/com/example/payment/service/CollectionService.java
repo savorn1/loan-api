@@ -8,6 +8,11 @@ public interface CollectionService {
 
     List<CollectionWorkqueueItemResponse> getWorkqueue(CollectionBucket bucket, Long assignedToUserId);
 
+    // Same shape as getWorkqueue, but computed live from installment due dates instead
+    // of the OVERDUE status OverdueScheduler's nightly cron sets — won't miss a loan
+    // whose payment just passed its due date since that job last ran.
+    List<CollectionWorkqueueItemResponse> getLiveOverdueLoans(CollectionBucket bucket, Long assignedToUserId);
+
     CollectionCaseResponse getCase(Long loanId);
 
     CollectionCaseResponse assign(Long loanId, AssignCollectionCaseRequest request, String assignedBy);

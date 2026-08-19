@@ -26,6 +26,17 @@ public class CollectionController {
         return ResponseEntity.ok(ApiResponse.success(collectionService.getWorkqueue(bucket, assignedToUserId)));
     }
 
+    // Same response shape as the plain workqueue above, but computed live from
+    // installment due dates rather than depending on OverdueScheduler's nightly cron
+    // having already flipped a payment's status to OVERDUE.
+    @GetMapping("/live")
+    public ResponseEntity<ApiResponse<List<CollectionWorkqueueItemResponse>>> getLiveOverdueLoans(
+            @RequestParam(required = false) CollectionBucket bucket,
+            @RequestParam(required = false) Long assignedToUserId) {
+        return ResponseEntity.ok(
+                ApiResponse.success(collectionService.getLiveOverdueLoans(bucket, assignedToUserId)));
+    }
+
     @GetMapping("/{loanId}/case")
     public ResponseEntity<ApiResponse<CollectionCaseResponse>> getCase(@PathVariable Long loanId) {
         return ResponseEntity.ok(ApiResponse.success(collectionService.getCase(loanId)));

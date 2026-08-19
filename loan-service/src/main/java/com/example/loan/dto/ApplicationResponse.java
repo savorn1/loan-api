@@ -7,6 +7,7 @@ import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 @Data
 @Builder
@@ -17,6 +18,8 @@ public class ApplicationResponse {
     private Long customerId;
     private String customerName;
     private Long branchId;
+    private UUID loanProductId;
+    private String loanProductName;
     private BigDecimal requestedAmount;
     private Integer requestedTermMonths;
     private String purpose;

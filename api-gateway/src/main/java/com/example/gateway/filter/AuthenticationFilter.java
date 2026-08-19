@@ -24,9 +24,11 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
 
     private static final Logger log = LoggerFactory.getLogger(AuthenticationFilter.class);
 
+    // /api/auth/register is deliberately not public — this is a staff-only system with
+    // no self-signup; new users are created by an admin via POST /api/auth/users
+    // (see UserController), and the register endpoint itself is now ADMIN-gated too.
     private static final List<String> PUBLIC_PATHS = List.of(
             "/api/auth/login",
-            "/api/auth/register",
             "/api/auth/refresh",
             "/api/auth/logout",
             "/swagger-ui",

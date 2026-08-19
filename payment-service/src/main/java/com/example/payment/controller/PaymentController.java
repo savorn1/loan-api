@@ -5,12 +5,14 @@ import com.example.payment.common.PageResponse;
 import com.example.payment.dto.GenerateScheduleRequest;
 import com.example.payment.dto.PaymentRequest;
 import com.example.payment.dto.PaymentResponse;
+import com.example.payment.dto.PaymentStatusHistoryResponse;
 import com.example.payment.service.PaymentService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -54,8 +56,15 @@ public class PaymentController {
     }
 
     @PutMapping("/{id}/pay")
-    public ResponseEntity<ApiResponse<PaymentResponse>> markAsPaid(@PathVariable Long id) {
-        return ResponseEntity.ok(ApiResponse.success("Payment marked as paid", paymentService.markAsPaid(id)));
+    public ResponseEntity<ApiResponse<PaymentResponse>> markAsPaid(
+            @PathVariable Long id, Authentication authentication) {
+        return ResponseEntity.ok(
+                ApiResponse.success("Payment marked as paid", paymentService.markAsPaid(id, actorName(authentication))));
+    }
+
+    @GetMapping("/{id}/status-history")
+    public ResponseEntity<ApiResponse<List<PaymentStatusHistoryResponse>>> getStatusHistory(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.success(paymentService.getStatusHistory(id)));
     }
 
     @PreAuthorize("hasRole('ADMIN')")
@@ -63,5 +72,9 @@ public class PaymentController {
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable Long id) {
         paymentService.delete(id);
         return ResponseEntity.ok(ApiResponse.success("Payment deleted", null));
+    }
+
+    private String actorName(Authentication authentication) {
+        return authentication != null && authentication.getName() != null ? authentication.getName() : "system";
     }
 }

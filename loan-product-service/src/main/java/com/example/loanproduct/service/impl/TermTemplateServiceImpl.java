@@ -24,6 +24,7 @@ public class TermTemplateServiceImpl implements TermTemplateService {
                 .code(request.getCode())
                 .name(request.getName())
                 .termValue(request.getTermValue())
+                .termUnit(request.getTermUnit())
                 .status(request.getStatus())
                 .build();
         return toResponse(termTemplateRepository.save(template));
@@ -45,6 +46,7 @@ public class TermTemplateServiceImpl implements TermTemplateService {
         template.setCode(request.getCode());
         template.setName(request.getName());
         template.setTermValue(request.getTermValue());
+        template.setTermUnit(request.getTermUnit());
         template.setStatus(request.getStatus());
         return toResponse(termTemplateRepository.save(template));
     }
@@ -65,6 +67,7 @@ public class TermTemplateServiceImpl implements TermTemplateService {
                 .code(template.getCode())
                 .name(template.getName())
                 .termValue(template.getTermValue())
+                .termUnit(template.getTermUnit())
                 .status(template.getStatus())
                 .createdAt(template.getCreatedAt())
                 .updatedAt(template.getUpdatedAt())

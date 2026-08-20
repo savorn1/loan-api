@@ -1,6 +1,7 @@
 package com.example.loanproduct.dto;
 
 import com.example.loanproduct.entity.TermTemplateStatus;
+import com.example.loanproduct.entity.TermUnit;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -21,6 +22,9 @@ public class TermTemplateRequest {
     @NotNull
     @Min(1)
     private Integer termValue;
+
+    @NotNull
+    private TermUnit termUnit;
 
     @NotNull
     private TermTemplateStatus status;

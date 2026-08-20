@@ -38,8 +38,16 @@ public class LoanRestructure extends BaseEntity {
     @JoinColumn(name = "loan_id", nullable = false)
     private Loan loan;
 
+    // Interpreted per newTermUnit — see Loan.termMonths for the DAY/MONTH/YEAR rules.
     @Column(name = "new_term_months", nullable = false)
     private Integer newTermMonths;
+
+    // Default backfills existing rows when Hibernate adds this NOT NULL column
+    // to a non-empty table under ddl-auto=update.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "new_term_unit", nullable = false, columnDefinition = "varchar(10) default 'MONTH'")
+    @Builder.Default
+    private TermUnit newTermUnit = TermUnit.MONTH;
 
     @Column(name = "new_interest_rate", precision = 5, scale = 2)
     private BigDecimal newInterestRate;

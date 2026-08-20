@@ -60,8 +60,18 @@ public class Loan extends BaseEntity {
     @Column(nullable = false, precision = 5, scale = 2)
     private BigDecimal interestRate;
 
+    // Interpreted per termUnit: a literal month count for MONTH, a year count
+    // for YEAR (multiplied by 12 at schedule-generation time), or a day count
+    // for DAY (a single bullet repayment instead of a monthly schedule).
     @Column(nullable = false)
     private Integer termMonths;
+
+    // Default backfills existing rows when Hibernate adds this NOT NULL column
+    // to a non-empty table under ddl-auto=update.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "term_unit", nullable = false, columnDefinition = "varchar(10) default 'MONTH'")
+    @Builder.Default
+    private TermUnit termUnit = TermUnit.MONTH;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

@@ -4,6 +4,8 @@ import java.math.BigDecimal;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -40,8 +42,16 @@ public class GroupLoanMember extends BaseEntity {
     @Column(name = "requested_amount", nullable = false, precision = 15, scale = 2)
     private BigDecimal requestedAmount;
 
+    // Interpreted per requestedTermUnit — see Loan.termMonths for the DAY/MONTH/YEAR rules.
     @Column(name = "requested_term_months", nullable = false)
     private Integer requestedTermMonths;
+
+    // Default backfills existing rows when Hibernate adds this NOT NULL column
+    // to a non-empty table under ddl-auto=update.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "requested_term_unit", nullable = false, columnDefinition = "varchar(10) default 'MONTH'")
+    @Builder.Default
+    private TermUnit requestedTermUnit = TermUnit.MONTH;
 
     @Column(name = "approved_amount", precision = 15, scale = 2)
     private BigDecimal approvedAmount;
@@ -51,6 +61,10 @@ public class GroupLoanMember extends BaseEntity {
 
     @Column(name = "approved_term_months")
     private Integer approvedTermMonths;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "approved_term_unit")
+    private TermUnit approvedTermUnit;
 
     @Column(name = "loan_id")
     private Long loanId;

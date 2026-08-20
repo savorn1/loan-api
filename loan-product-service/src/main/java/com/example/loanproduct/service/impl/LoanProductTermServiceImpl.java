@@ -111,6 +111,7 @@ public class LoanProductTermServiceImpl implements LoanProductTermService {
                 .termTemplateCode(term.getTermTemplate().getCode())
                 .termTemplateName(term.getTermTemplate().getName())
                 .termValue(term.getTermTemplate().getTermValue())
+                .termUnit(term.getTermTemplate().getTermUnit())
                 .isDefault(term.getIsDefault())
                 .status(term.getStatus())
                 .createdAt(term.getCreatedAt())

@@ -90,6 +90,7 @@ import com.example.loan.entity.RestructureStatus;
 import com.example.loan.entity.ScheduleInstallmentStatus;
 import com.example.loan.entity.ScheduleStatus;
 import com.example.loan.entity.SettlementStatus;
+import com.example.loan.entity.TermUnit;
 import com.example.loan.entity.TransactionType;
 import com.example.loan.entity.WriteoffStatus;
 import com.example.loan.exception.AppException;
@@ -183,6 +184,7 @@ public class LoanServiceImpl implements LoanService {
                 .principal(request.getPrincipal())
                 .interestRate(request.getInterestRate())
                 .termMonths(request.getTermMonths())
+                .termUnit(request.getTermUnit())
                 .purpose(request.getPurpose())
                 .build();
 
@@ -293,10 +295,27 @@ public class LoanServiceImpl implements LoanService {
         LocalDateTime now = LocalDateTime.now();
         LocalDate disbursementDate = now.toLocalDate();
 
-        List<AmortizationCalculator.Installment> schedule = AmortizationCalculator.generateSchedule(
-                loan.getPrincipal(), loan.getInterestRate(), loan.getTermMonths(), disbursementDate);
-        BigDecimal emi = AmortizationCalculator.calculateEmi(
-                loan.getPrincipal(), loan.getInterestRate(), loan.getTermMonths());
+        // DAY-unit loans don't fit the monthly reducing-balance model at all —
+        // one bullet repayment instead. YEAR-unit loans still amortize monthly,
+        // just termMonths*12 installments (the common real-world convention for
+        // an "N-year loan"); MONTH is unchanged.
+        List<AmortizationCalculator.Installment> schedule;
+        BigDecimal emi;
+        LocalDate maturityDate;
+        if (loan.getTermUnit() == TermUnit.DAY) {
+            AmortizationCalculator.Installment bullet = AmortizationCalculator.generateBulletInstallment(
+                    loan.getPrincipal(), loan.getInterestRate(), loan.getTermMonths(), disbursementDate);
+            schedule = List.of(bullet);
+            emi = bullet.amount();
+            maturityDate = disbursementDate.plusDays(loan.getTermMonths());
+        } else {
+            int effectiveMonths = loan.getTermUnit() == TermUnit.YEAR
+                    ? loan.getTermMonths() * 12 : loan.getTermMonths();
+            schedule = AmortizationCalculator.generateSchedule(
+                    loan.getPrincipal(), loan.getInterestRate(), effectiveMonths, disbursementDate);
+            emi = AmortizationCalculator.calculateEmi(loan.getPrincipal(), loan.getInterestRate(), effectiveMonths);
+            maturityDate = disbursementDate.plusMonths(effectiveMonths);
+        }
         BigDecimal totalOutstanding = schedule.stream()
                 .map(AmortizationCalculator.Installment::amount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -319,7 +338,7 @@ public class LoanServiceImpl implements LoanService {
         LoanStatus previousStatus = loan.getStatus();
         loan.setStatus(LoanStatus.ACTIVE);
         loan.setDisbursedAt(now);
-        loan.setMaturityDate(disbursementDate.plusMonths(loan.getTermMonths()));
+        loan.setMaturityDate(maturityDate);
         loan.setMonthlyInstallment(emi);
         loan.setOutstandingBalance(totalOutstanding);
         Loan saved = loanRepository.save(loan);
@@ -1315,6 +1334,7 @@ public class LoanServiceImpl implements LoanService {
         LoanRestructure restructure = LoanRestructure.builder()
                 .loan(loan)
                 .newTermMonths(request.getNewTermMonths())
+                .newTermUnit(request.getNewTermUnit())
                 .newInterestRate(request.getNewInterestRate())
                 .reason(request.getReason())
                 .effectiveDate(request.getEffectiveDate())
@@ -1343,13 +1363,28 @@ public class LoanServiceImpl implements LoanService {
         BigDecimal newRate = restructure.getNewInterestRate() != null
                 ? restructure.getNewInterestRate() : loan.getInterestRate();
 
-        List<AmortizationCalculator.Installment> schedule = AmortizationCalculator.generateSchedule(
-                outstanding, newRate, restructure.getNewTermMonths(), restructure.getEffectiveDate());
-        BigDecimal emi = AmortizationCalculator.calculateEmi(outstanding, newRate, restructure.getNewTermMonths());
+        List<AmortizationCalculator.Installment> schedule;
+        BigDecimal emi;
+        LocalDate maturityDate;
+        if (restructure.getNewTermUnit() == TermUnit.DAY) {
+            AmortizationCalculator.Installment bullet = AmortizationCalculator.generateBulletInstallment(
+                    outstanding, newRate, restructure.getNewTermMonths(), restructure.getEffectiveDate());
+            schedule = List.of(bullet);
+            emi = bullet.amount();
+            maturityDate = restructure.getEffectiveDate().plusDays(restructure.getNewTermMonths());
+        } else {
+            int effectiveMonths = restructure.getNewTermUnit() == TermUnit.YEAR
+                    ? restructure.getNewTermMonths() * 12 : restructure.getNewTermMonths();
+            schedule = AmortizationCalculator.generateSchedule(
+                    outstanding, newRate, effectiveMonths, restructure.getEffectiveDate());
+            emi = AmortizationCalculator.calculateEmi(outstanding, newRate, effectiveMonths);
+            maturityDate = restructure.getEffectiveDate().plusMonths(effectiveMonths);
+        }
 
         loan.setTermMonths(restructure.getNewTermMonths());
+        loan.setTermUnit(restructure.getNewTermUnit());
         loan.setInterestRate(newRate);
-        loan.setMaturityDate(restructure.getEffectiveDate().plusMonths(restructure.getNewTermMonths()));
+        loan.setMaturityDate(maturityDate);
         loan.setMonthlyInstallment(emi);
         Loan savedLoan = loanRepository.save(loan);
 
@@ -1985,6 +2020,7 @@ public class LoanServiceImpl implements LoanService {
                 .principal(loan.getPrincipal())
                 .interestRate(loan.getInterestRate())
                 .termMonths(loan.getTermMonths())
+                .termUnit(loan.getTermUnit())
                 .status(loan.getStatus())
                 .purpose(loan.getPurpose())
                 .approvedAt(loan.getApprovedAt())
@@ -2105,6 +2141,7 @@ public class LoanServiceImpl implements LoanService {
                 .id(restructure.getId())
                 .loanId(restructure.getLoan().getId())
                 .newTermMonths(restructure.getNewTermMonths())
+                .newTermUnit(restructure.getNewTermUnit())
                 .newInterestRate(restructure.getNewInterestRate())
                 .reason(restructure.getReason())
                 .effectiveDate(restructure.getEffectiveDate())

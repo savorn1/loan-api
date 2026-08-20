@@ -52,6 +52,10 @@ public class ApplicationApproval extends BaseEntity {
     @Column(name = "approved_term_months")
     private Integer approvedTermMonths;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "approved_term_unit")
+    private TermUnit approvedTermUnit;
+
     @Column(columnDefinition = "text")
     private String comments;
 

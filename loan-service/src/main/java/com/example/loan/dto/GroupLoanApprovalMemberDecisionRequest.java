@@ -1,5 +1,6 @@
 package com.example.loan.dto;
 
+import com.example.loan.entity.TermUnit;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
@@ -25,7 +26,11 @@ public class GroupLoanApprovalMemberDecisionRequest {
     @DecimalMax("100.00")
     private BigDecimal approvedInterestRate;
 
+    // Bound relaxed from the old month-only @Max(360) since this can now also
+    // hold a day count (unit-aware validation isn't enforced here yet).
     @Min(1)
-    @Max(360)
+    @Max(3650)
     private Integer approvedTermMonths;
+
+    private TermUnit approvedTermUnit;
 }

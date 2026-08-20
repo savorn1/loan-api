@@ -21,6 +21,7 @@ import com.example.loan.entity.GroupLoanMember;
 import com.example.loan.entity.GroupMemberStatus;
 import com.example.loan.entity.Loan;
 import com.example.loan.entity.LoanStatus;
+import com.example.loan.entity.TermUnit;
 import com.example.loan.exception.AppException;
 import com.example.loan.exception.ResourceNotFoundException;
 import com.example.loan.repository.GroupLoanApplicationDocumentRepository;
@@ -90,6 +91,7 @@ public class GroupLoanApplicationServiceImpl implements GroupLoanApplicationServ
                     .customerId(memberRequest.getCustomerId())
                     .requestedAmount(memberRequest.getRequestedAmount())
                     .requestedTermMonths(memberRequest.getRequestedTermMonths())
+                    .requestedTermUnit(memberRequest.getRequestedTermUnit())
                     .build();
             memberRepository.save(member);
         }
@@ -167,9 +169,16 @@ public class GroupLoanApplicationServiceImpl implements GroupLoanApplicationServ
                         .orElseThrow(() -> new AppException(HttpStatus.BAD_REQUEST,
                                 "Customer " + decision.getCustomerId() + " is not a member of this application"));
 
+                // Falls back to what the member originally requested if the approver
+                // doesn't explicitly change it — same convention as the individual
+                // application approval flow.
+                TermUnit approvedTermUnit = decision.getApprovedTermUnit() != null
+                        ? decision.getApprovedTermUnit() : member.getRequestedTermUnit();
+
                 member.setApprovedAmount(decision.getApprovedAmount());
                 member.setApprovedInterestRate(decision.getApprovedInterestRate());
                 member.setApprovedTermMonths(decision.getApprovedTermMonths());
+                member.setApprovedTermUnit(approvedTermUnit);
 
                 Loan loan = Loan.builder()
                         .customerId(member.getCustomerId())
@@ -177,6 +186,7 @@ public class GroupLoanApplicationServiceImpl implements GroupLoanApplicationServ
                         .principal(decision.getApprovedAmount())
                         .interestRate(decision.getApprovedInterestRate())
                         .termMonths(decision.getApprovedTermMonths())
+                        .termUnit(approvedTermUnit)
                         .purpose(application.getPurpose())
                         .status(LoanStatus.APPROVED)
                         .approvedAt(now)
@@ -283,9 +293,11 @@ public class GroupLoanApplicationServiceImpl implements GroupLoanApplicationServ
                 .customerName(customer != null ? customer.getFirstName() + " " + customer.getLastName() : null)
                 .requestedAmount(member.getRequestedAmount())
                 .requestedTermMonths(member.getRequestedTermMonths())
+                .requestedTermUnit(member.getRequestedTermUnit())
                 .approvedAmount(member.getApprovedAmount())
                 .approvedInterestRate(member.getApprovedInterestRate())
                 .approvedTermMonths(member.getApprovedTermMonths())
+                .approvedTermUnit(member.getApprovedTermUnit())
                 .loanId(member.getLoanId())
                 .build();
     }

@@ -38,6 +38,19 @@ public final class AmortizationCalculator {
         return numerator.divide(denominator, SCALE, RoundingMode.HALF_UP);
     }
 
+    // A single repayment at maturity — principal plus simple (non-compounding)
+    // interest, Actual/365. Used for DAY-unit terms, which don't fit the
+    // monthly reducing-balance model the rest of this class assumes.
+    public static Installment generateBulletInstallment(BigDecimal principal, BigDecimal annualRatePercent,
+                                                          int days, LocalDate disbursementDate) {
+        BigDecimal interest = principal.multiply(annualRatePercent, MC)
+                .divide(BigDecimal.valueOf(100), MC)
+                .multiply(BigDecimal.valueOf(days), MC)
+                .divide(BigDecimal.valueOf(365), SCALE, RoundingMode.HALF_UP);
+        BigDecimal amount = principal.add(interest);
+        return new Installment(1, disbursementDate.plusDays(days), principal, interest, amount);
+    }
+
     public static List<Installment> generateSchedule(BigDecimal principal, BigDecimal annualRatePercent,
                                                        int termMonths, LocalDate disbursementDate) {
         BigDecimal emi = calculateEmi(principal, annualRatePercent, termMonths);

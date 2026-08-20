@@ -1,6 +1,7 @@
 package com.example.loanproduct.dto;
 
 import com.example.loanproduct.entity.TermTemplateStatus;
+import com.example.loanproduct.entity.TermUnit;
 import lombok.Builder;
 import lombok.Data;
 
@@ -15,6 +16,7 @@ public class TermTemplateResponse {
     private String code;
     private String name;
     private Integer termValue;
+    private TermUnit termUnit;
     private TermTemplateStatus status;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

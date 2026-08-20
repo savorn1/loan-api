@@ -23,6 +23,7 @@ import com.example.loan.entity.ApprovalDecision;
 import com.example.loan.entity.DocumentStatus;
 import com.example.loan.entity.Loan;
 import com.example.loan.entity.LoanStatus;
+import com.example.loan.entity.TermUnit;
 import com.example.loan.exception.AppException;
 import com.example.loan.exception.ResourceNotFoundException;
 import com.example.loan.repository.ApplicationApprovalRepository;
@@ -78,6 +79,7 @@ public class ApplicationServiceImpl implements ApplicationService {
                 .loanProductId(request.getLoanProductId())
                 .requestedAmount(request.getRequestedAmount())
                 .requestedTermMonths(request.getRequestedTermMonths())
+                .requestedTermUnit(request.getRequestedTermUnit())
                 .purpose(request.getPurpose())
                 .status(ApplicationStatus.SUBMITTED)
                 .submittedAt(LocalDateTime.now())
@@ -148,6 +150,7 @@ public class ApplicationServiceImpl implements ApplicationService {
         application.setLoanProductId(request.getLoanProductId());
         application.setRequestedAmount(request.getRequestedAmount());
         application.setRequestedTermMonths(request.getRequestedTermMonths());
+        application.setRequestedTermUnit(request.getRequestedTermUnit());
         application.setPurpose(request.getPurpose());
         CustomerResponse customer = customerClient.getById(application.getCustomerId()).getData();
         return toResponse(applicationRepository.save(application), customer, product);
@@ -269,6 +272,12 @@ public class ApplicationServiceImpl implements ApplicationService {
                     "approvedAmount, approvedInterestRate and approvedTermMonths are all required when approving");
         }
 
+        // Falls back to what the customer originally requested if the approver
+        // doesn't explicitly change it — approving with a different term value
+        // but the same unit is the common case.
+        TermUnit approvedTermUnit = request.getApprovedTermUnit() != null
+                ? request.getApprovedTermUnit() : application.getRequestedTermUnit();
+
         ApplicationApproval approval = ApplicationApproval.builder()
                 .application(application)
                 .approverName(username)
@@ -276,6 +285,7 @@ public class ApplicationServiceImpl implements ApplicationService {
                 .approvedAmount(request.getApprovedAmount())
                 .approvedInterestRate(request.getApprovedInterestRate())
                 .approvedTermMonths(request.getApprovedTermMonths())
+                .approvedTermUnit(approvedTermUnit)
                 .comments(request.getComments())
                 .decidedAt(now)
                 .build();
@@ -290,6 +300,7 @@ public class ApplicationServiceImpl implements ApplicationService {
                     .principal(request.getApprovedAmount())
                     .interestRate(request.getApprovedInterestRate())
                     .termMonths(request.getApprovedTermMonths())
+                    .termUnit(approvedTermUnit)
                     .purpose(application.getPurpose())
                     .status(LoanStatus.APPROVED)
                     .approvedAt(now)
@@ -366,6 +377,7 @@ public class ApplicationServiceImpl implements ApplicationService {
                 .approvedAmount(approval.getApprovedAmount())
                 .approvedInterestRate(approval.getApprovedInterestRate())
                 .approvedTermMonths(approval.getApprovedTermMonths())
+                .approvedTermUnit(approval.getApprovedTermUnit())
                 .comments(approval.getComments())
                 .decidedAt(approval.getDecidedAt())
                 .build();
@@ -407,6 +419,7 @@ public class ApplicationServiceImpl implements ApplicationService {
                 .loanProductName(product != null ? product.getName() : null)
                 .requestedAmount(application.getRequestedAmount())
                 .requestedTermMonths(application.getRequestedTermMonths())
+                .requestedTermUnit(application.getRequestedTermUnit())
                 .purpose(application.getPurpose())
                 .status(application.getStatus())
                 .submittedAt(application.getSubmittedAt())

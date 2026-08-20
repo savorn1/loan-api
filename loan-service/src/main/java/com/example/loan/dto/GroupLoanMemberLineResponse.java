@@ -1,5 +1,6 @@
 package com.example.loan.dto;
 
+import com.example.loan.entity.TermUnit;
 import lombok.Builder;
 import lombok.Data;
 
@@ -13,8 +14,10 @@ public class GroupLoanMemberLineResponse {
     private String customerName;
     private BigDecimal requestedAmount;
     private Integer requestedTermMonths;
+    private TermUnit requestedTermUnit;
     private BigDecimal approvedAmount;
     private BigDecimal approvedInterestRate;
     private Integer approvedTermMonths;
+    private TermUnit approvedTermUnit;
     private Long loanId;
 }

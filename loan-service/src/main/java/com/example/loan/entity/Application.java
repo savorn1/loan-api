@@ -60,8 +60,18 @@ public class Application extends BaseEntity {
     @Column(name = "requested_amount", nullable = false, precision = 15, scale = 2)
     private BigDecimal requestedAmount;
 
+    // Interpreted per requestedTermUnit: a literal month count for MONTH, a year
+    // count for YEAR (multiplied by 12 at schedule-generation time), or a day
+    // count for DAY (a single bullet repayment instead of a monthly schedule).
     @Column(name = "requested_term_months", nullable = false)
     private Integer requestedTermMonths;
+
+    // Default backfills existing rows when Hibernate adds this NOT NULL column
+    // to a non-empty table under ddl-auto=update.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "requested_term_unit", nullable = false, columnDefinition = "varchar(10) default 'MONTH'")
+    @Builder.Default
+    private TermUnit requestedTermUnit = TermUnit.MONTH;
 
     private String purpose;
 

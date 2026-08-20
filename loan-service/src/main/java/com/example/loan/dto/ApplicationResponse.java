@@ -1,6 +1,7 @@
 package com.example.loan.dto;
 
 import com.example.loan.entity.ApplicationStatus;
+import com.example.loan.entity.TermUnit;
 import lombok.Builder;
 import lombok.Data;
 
@@ -22,6 +23,7 @@ public class ApplicationResponse {
     private String loanProductName;
     private BigDecimal requestedAmount;
     private Integer requestedTermMonths;
+    private TermUnit requestedTermUnit;
     private String purpose;
     private ApplicationStatus status;
     private LocalDateTime submittedAt;

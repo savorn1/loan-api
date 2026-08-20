@@ -1,6 +1,7 @@
 package com.example.loan.dto;
 
 import com.example.loan.entity.RestructureStatus;
+import com.example.loan.entity.TermUnit;
 import lombok.Builder;
 import lombok.Data;
 
@@ -15,6 +16,7 @@ public class LoanRestructureResponse {
     private Long id;
     private Long loanId;
     private Integer newTermMonths;
+    private TermUnit newTermUnit;
     private BigDecimal newInterestRate;
     private String reason;
     private LocalDate effectiveDate;

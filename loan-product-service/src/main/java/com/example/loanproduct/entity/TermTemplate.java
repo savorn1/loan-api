@@ -24,9 +24,15 @@ public class TermTemplate extends BaseEntity {
     @Column(nullable = false, length = 100)
     private String name;
 
-    // Interpreted using the assigned product's termUnit (DAY/MONTH/YEAR).
     @Column(name = "term_value", nullable = false)
     private Integer termValue;
+
+    // Default backfills existing rows when Hibernate adds this NOT NULL column
+    // to a non-empty table under ddl-auto=update.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "term_unit", nullable = false, columnDefinition = "varchar(10) default 'MONTH'")
+    @Builder.Default
+    private TermUnit termUnit = TermUnit.MONTH;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

@@ -1,6 +1,7 @@
 package com.example.loan.dto;
 
 import com.example.loan.entity.LoanStatus;
+import com.example.loan.entity.TermUnit;
 import lombok.Builder;
 import lombok.Data;
 
@@ -23,6 +24,7 @@ public class LoanResponse {
     private BigDecimal principal;
     private BigDecimal interestRate;
     private Integer termMonths;
+    private TermUnit termUnit;
     private LoanStatus status;
     private String purpose;
     private LocalDateTime approvedAt;

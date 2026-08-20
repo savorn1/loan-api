@@ -45,7 +45,13 @@ public class ReportServiceImpl implements ReportService {
     @Override
     public ParSummaryResponse getParSummary() {
         LocalDate today = LocalDate.now();
-        Map<Long, List<Payment>> overdueByLoan = paymentRepository.findByStatus(PaymentStatus.OVERDUE).stream()
+        // Live-computed (dueDate < today, not yet PAID) rather than the OVERDUE status
+        // flag alone — see CollectionServiceImpl.getLiveOverdueLoans for why: that flag
+        // is only set by OverdueScheduler's nightly cron, so relying on it here would
+        // under-report PAR/provisioning for any installment that passed its due date
+        // since the cron last ran.
+        Map<Long, List<Payment>> overdueByLoan = paymentRepository
+                .findByDueDateBeforeAndStatusNot(today, PaymentStatus.PAID).stream()
                 .collect(Collectors.groupingBy(Payment::getLoanId));
 
         List<LoanOverdue> perLoan = overdueByLoan.values().stream()
@@ -115,7 +121,13 @@ public class ReportServiceImpl implements ReportService {
     @Override
     public ProvisioningSummaryResponse getProvisioningSummary() {
         LocalDate today = LocalDate.now();
-        Map<Long, List<Payment>> overdueByLoan = paymentRepository.findByStatus(PaymentStatus.OVERDUE).stream()
+        // Live-computed (dueDate < today, not yet PAID) rather than the OVERDUE status
+        // flag alone — see CollectionServiceImpl.getLiveOverdueLoans for why: that flag
+        // is only set by OverdueScheduler's nightly cron, so relying on it here would
+        // under-report PAR/provisioning for any installment that passed its due date
+        // since the cron last ran.
+        Map<Long, List<Payment>> overdueByLoan = paymentRepository
+                .findByDueDateBeforeAndStatusNot(today, PaymentStatus.PAID).stream()
                 .collect(Collectors.groupingBy(Payment::getLoanId));
 
         List<LoanOverdue> perLoan = overdueByLoan.values().stream()

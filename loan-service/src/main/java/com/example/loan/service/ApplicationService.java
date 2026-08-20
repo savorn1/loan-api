@@ -9,6 +9,7 @@ import com.example.loan.dto.ApplicationNoteRequest;
 import com.example.loan.dto.ApplicationNoteResponse;
 import com.example.loan.dto.ApplicationRequest;
 import com.example.loan.dto.ApplicationResponse;
+import com.example.loan.dto.EligibilityCheckResponse;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
@@ -44,4 +45,6 @@ public interface ApplicationService {
     ApplicationNoteResponse addNote(Long id, ApplicationNoteRequest request);
 
     ApplicationResponse addApproval(Long id, ApplicationApprovalRequest request);
+
+    List<EligibilityCheckResponse> checkEligibility(Long id);
 }

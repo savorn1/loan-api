@@ -9,6 +9,7 @@ import com.example.loan.dto.ApplicationNoteRequest;
 import com.example.loan.dto.ApplicationNoteResponse;
 import com.example.loan.dto.ApplicationRequest;
 import com.example.loan.dto.ApplicationResponse;
+import com.example.loan.dto.EligibilityCheckResponse;
 import com.example.loan.service.ApplicationService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -51,6 +52,12 @@ public class ApplicationController {
     @GetMapping("/customer/{customerId}")
     public ResponseEntity<ApiResponse<List<ApplicationResponse>>> getByCustomer(@PathVariable Long customerId) {
         return ResponseEntity.ok(ApiResponse.success(applicationService.getByCustomer(customerId)));
+    }
+
+    // Advisory only — never blocks create/update/approval. See EligibilityServiceImpl.
+    @GetMapping("/{id}/eligibility")
+    public ResponseEntity<ApiResponse<List<EligibilityCheckResponse>>> checkEligibility(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.success(applicationService.checkEligibility(id)));
     }
 
     @PutMapping("/{id}")

@@ -27,8 +27,8 @@ INSERT INTO rule_templates (
    'ACTIVE', now(), now()),
 
   (gen_random_uuid(), 'EMPLOYMENT_STATUS_ELIGIBLE', 'Eligible Employment Status',
-   'EMPLOYMENT_STATUS', 'IN', 'EMPLOYED,SELF_EMPLOYED', NULL,
-   'Applicant must be employed or self-employed.',
+   'EMPLOYMENT_STATUS', 'IN', 'FULL_TIME,PART_TIME,SELF_EMPLOYED,CONTRACT', NULL,
+   'Applicant must be employed (full-time, part-time, self-employed, or contract) — not unemployed.',
    'ACTIVE', now(), now()),
 
   (gen_random_uuid(), 'MAX_EXISTING_LOANS', 'Maximum Existing Loans',

@@ -12,6 +12,7 @@ import com.example.loan.dto.ApplicationNoteResponse;
 import com.example.loan.dto.ApplicationRequest;
 import com.example.loan.dto.ApplicationResponse;
 import com.example.loan.dto.CustomerResponse;
+import com.example.loan.dto.EligibilityCheckResponse;
 import com.example.loan.dto.LoanProductResponse;
 import com.example.loan.entity.Application;
 import com.example.loan.entity.ApplicationApproval;
@@ -30,6 +31,7 @@ import com.example.loan.repository.ApplicationNoteRepository;
 import com.example.loan.repository.ApplicationRepository;
 import com.example.loan.repository.LoanRepository;
 import com.example.loan.service.ApplicationService;
+import com.example.loan.service.EligibilityService;
 import com.example.storage.FileStorageService;
 import com.example.storage.StoredFile;
 import lombok.RequiredArgsConstructor;
@@ -61,6 +63,7 @@ public class ApplicationServiceImpl implements ApplicationService {
     private final CustomerClient customerClient;
     private final LoanProductClient loanProductClient;
     private final FileStorageService fileStorageService;
+    private final EligibilityService eligibilityService;
 
     @Override
     @Transactional
@@ -300,6 +303,12 @@ public class ApplicationServiceImpl implements ApplicationService {
         applicationRepository.save(application);
 
         return toResponse(application, customerClient.getById(application.getCustomerId()).getData());
+    }
+
+    @Override
+    public List<EligibilityCheckResponse> checkEligibility(Long id) {
+        Application application = findOrThrow(id);
+        return eligibilityService.checkEligibility(application.getCustomerId(), application.getLoanProductId());
     }
 
     private Application findOrThrow(Long id) {

@@ -1,7 +1,9 @@
 package com.example.loan.client;
 
 import com.example.loan.common.ApiResponse;
+import com.example.loan.dto.CustomerEmploymentResponse;
 import com.example.loan.dto.CustomerIdentityResponse;
+import com.example.loan.dto.CustomerIncomeResponse;
 import com.example.loan.dto.CustomerResponse;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -22,4 +24,12 @@ public interface CustomerClient {
     // if the customer has >=1 ACTIVE identity on file).
     @GetMapping("/api/customers/{id}/identities")
     ApiResponse<List<CustomerIdentityResponse>> getIdentities(@PathVariable Long id);
+
+    // Used by EligibilityServiceImpl for EMPLOYMENT_STATUS rules.
+    @GetMapping("/api/customers/{id}/employments")
+    ApiResponse<List<CustomerEmploymentResponse>> getEmployments(@PathVariable Long id);
+
+    // Used by EligibilityServiceImpl for MONTHLY_INCOME rules.
+    @GetMapping("/api/customers/{id}/incomes")
+    ApiResponse<List<CustomerIncomeResponse>> getIncomes(@PathVariable Long id);
 }

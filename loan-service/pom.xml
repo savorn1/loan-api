@@ -46,6 +46,14 @@
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-openfeign</artifactId>
         </dependency>
+        <!-- Circuit breaker for EligibilityServiceImpl's cross-service fan-out (up to 4
+             Feign calls to customer-service/loan-product-service per check) — degrades
+             to an empty eligibility result instead of hanging/cascading when a downstream
+             service is unhealthy. See EligibilityServiceImpl and application.properties. -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-circuitbreaker-resilience4j</artifactId>
+        </dependency>
         <!-- JWT -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>

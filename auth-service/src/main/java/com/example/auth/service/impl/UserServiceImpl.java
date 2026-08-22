@@ -4,6 +4,7 @@ import com.example.auth.client.BranchClient;
 import com.example.auth.dto.BranchResponse;
 import com.example.auth.dto.CreateUserRequest;
 import com.example.auth.dto.PageResponse;
+import com.example.auth.dto.ResetPasswordRequest;
 import com.example.auth.dto.UpdateBranchRequest;
 import com.example.auth.dto.UpdateRoleRequest;
 import com.example.auth.dto.UpdateStatusRequest;
@@ -151,6 +152,25 @@ public class UserServiceImpl implements UserService {
         refreshTokenRepository.revokeAllForUser(user.getId());
         userSessionStore.delete(user.getUuid().toString());
         return toResponse(user);
+    }
+
+    @Override
+    @Transactional
+    public void resetPassword(Long id, ResetPasswordRequest request, String actingUsername) {
+        SysUser user = findUser(id);
+        // Self-service password changes go through /auth/change-password (requires the
+        // current password); this admin action exists precisely for when that's not an
+        // option (forgotten password), so allowing it on your own account would just be
+        // a way to bypass the current-password check.
+        if (user.getUsername().equals(actingUsername)) {
+            throw new AppException(HttpStatus.BAD_REQUEST, "Use change password to update your own password");
+        }
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        userRepository.save(user);
+        // Same reasoning as updateRole/updateStatus/updateBranch: invalidate every
+        // existing session so a leaked or now-mistrusted password stops granting access.
+        refreshTokenRepository.revokeAllForUser(user.getId());
+        userSessionStore.delete(user.getUuid().toString());
     }
 
     @Override

@@ -10,13 +10,17 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
+import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import javax.crypto.SecretKey;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 @Component
@@ -59,8 +63,7 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
         String authHeader = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             log.warn("Missing or invalid Authorization header for path: {}", path);
-            exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
-            return exchange.getResponse().setComplete();
+            return unauthorized(exchange, "Authentication required");
         }
 
         String token = authHeader.substring(7);
@@ -92,9 +95,22 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
             return chain.filter(mutated);
         } catch (Exception e) {
             log.warn("Invalid JWT token: {}", e.getMessage(), e);
-            exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
-            return exchange.getResponse().setComplete();
+            return unauthorized(exchange, "Invalid or expired session");
         }
+    }
+
+    // Every downstream service's GlobalExceptionHandler returns a {statusCode, message}
+    // JSON body on error (the frontend's ApiErrorBody contract) — matching that here
+    // means a 401 rejected at the gateway shows a real message instead of an empty
+    // response body, which a browser hitting a protected URL directly would otherwise
+    // render as its own bare "page isn't working" error page.
+    private Mono<Void> unauthorized(ServerWebExchange exchange, String message) {
+        ServerHttpResponse response = exchange.getResponse();
+        response.setStatusCode(HttpStatus.UNAUTHORIZED);
+        response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
+        String body = "{\"statusCode\":401,\"message\":\"%s\"}".formatted(message);
+        DataBuffer buffer = response.bufferFactory().wrap(body.getBytes(StandardCharsets.UTF_8));
+        return response.writeWith(Mono.just(buffer));
     }
 
     private Claims parseToken(String token) {

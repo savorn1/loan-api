@@ -22,4 +22,11 @@ public interface PaymentTransactionService {
     // method/channel/gateway — see PaymentTransactionDefaultsSeeder. Unlike create(),
     // there's no PENDING step: the money has already moved by the time this is called.
     PaymentTransactionResponse createForLoanRepayment(Long customerId, Long loanId, BigDecimal amount);
+
+    // Applies a signature-verified payment-wallet webhook delivery to the local
+    // transaction matched by walletDepositId. No-op (rather than throwing) when the
+    // status is unrecognized/non-terminal or already applied — see
+    // PaymentWalletWebhookController, which is the only caller and has already
+    // verified the delivery's HMAC signature before reaching here.
+    void applyWalletDepositWebhook(Long walletDepositId, String walletStatus, String failureReason);
 }

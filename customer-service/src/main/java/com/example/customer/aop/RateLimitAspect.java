@@ -15,6 +15,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.concurrent.TimeUnit;
 
 @Aspect
@@ -23,8 +25,6 @@ import java.util.concurrent.TimeUnit;
 public class RateLimitAspect {
 
     private static final Logger log = LoggerFactory.getLogger(RateLimitAspect.class);
-    private static final String LOOPBACK = "127.0.0.1";
-    private static final String LOOPBACK_V6 = "0:0:0:0:0:0:0:1";
 
     private final RedisTemplate<String, Object> redisTemplate;
 
@@ -51,13 +51,29 @@ public class RateLimitAspect {
         if (attrs == null) return "unknown";
         HttpServletRequest request = attrs.getRequest();
         String remoteAddr = request.getRemoteAddr();
-        boolean fromTrustedProxy = LOOPBACK.equals(remoteAddr) || LOOPBACK_V6.equals(remoteAddr);
-        if (fromTrustedProxy) {
+        if (isTrustedProxy(remoteAddr)) {
             String forwarded = request.getHeader("X-Forwarded-For");
             if (forwarded != null && !forwarded.isBlank()) {
                 return forwarded.split(",")[0].trim();
             }
         }
         return remoteAddr;
+    }
+
+    // Loopback covers a reverse proxy on the same host; site-local (RFC1918: 10/8,
+    // 172.16/12, 192.168/16 — Docker's default bridge networks live in this range)
+    // covers api-gateway calling in from another container on docker-compose's
+    // internal loan-net, which in docker-compose.prod.yml is the only way to reach
+    // this service at all (no ports: published for it there). A direct public-internet
+    // caller has a public remoteAddr either way, so their self-reported X-Forwarded-For
+    // is never trusted. Advisory rate limiting only, not a hard security boundary — see
+    // RateLimit.
+    private boolean isTrustedProxy(String remoteAddr) {
+        try {
+            InetAddress addr = InetAddress.getByName(remoteAddr);
+            return addr.isLoopbackAddress() || addr.isSiteLocalAddress();
+        } catch (UnknownHostException e) {
+            return false;
+        }
     }
 }

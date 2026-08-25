@@ -2,6 +2,7 @@ package com.example.payment.service.impl;
 
 import com.example.payment.client.CustomerClient;
 import com.example.payment.client.LoanClient;
+import com.example.payment.client.PaymentWalletClient;
 import com.example.payment.common.ApiResponse;
 import com.example.payment.config.PaymentTransactionDefaultsSeeder;
 import com.example.payment.dto.CustomerResponse;
@@ -48,6 +49,7 @@ class PaymentTransactionServiceImplTest {
     @Mock private PaymentGatewayRepository paymentGatewayRepository;
     @Mock private CustomerClient customerClient;
     @Mock private LoanClient loanClient;
+    @Mock private PaymentWalletClient paymentWalletClient;
 
     private PaymentTransactionServiceImpl service;
     private PaymentTransaction transaction;
@@ -56,7 +58,7 @@ class PaymentTransactionServiceImplTest {
     void setUp() {
         service = new PaymentTransactionServiceImpl(paymentTransactionRepository, paymentTransactionItemRepository,
                 paymentMethodRepository, paymentChannelRepository, paymentGatewayRepository, customerClient,
-                loanClient);
+                loanClient, paymentWalletClient);
 
         PaymentMethod method = PaymentMethod.builder().id(1L).name("Cash").build();
         PaymentChannel channel = PaymentChannel.builder().id(1L).name("Branch").build();

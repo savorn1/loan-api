@@ -49,4 +49,12 @@ public class PaymentTransactionRequest {
 
     @Size(max = 100)
     private String referenceNo;
+
+    // Optional. Retrying create() with the same key returns the original transaction
+    // instead of creating a duplicate — including a duplicate payment-wallet deposit
+    // if paymentGatewayId points at one. Generate a fresh value per logical payment
+    // attempt; reuse the same one only when retrying that exact attempt (e.g. after a
+    // client-side timeout where it's unknown whether the first call landed).
+    @Size(max = 100)
+    private String idempotencyKey;
 }

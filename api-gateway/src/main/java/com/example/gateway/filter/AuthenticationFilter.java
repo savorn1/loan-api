@@ -31,10 +31,16 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
     // /api/auth/register is deliberately not public — this is a staff-only system with
     // no self-signup; new users are created by an admin via POST /api/auth/users
     // (see UserController), and the register endpoint itself is now ADMIN-gated too.
+    //
+    // /api/payments/webhooks is payment-service's inbound webhook receiver for the
+    // payment-wallet Merchant API — a server-to-server delivery with no session token
+    // to present. It's authenticated instead by an HMAC signature verified in
+    // PaymentWalletWebhookController, not by a JWT.
     private static final List<String> PUBLIC_PATHS = List.of(
             "/api/auth/login",
             "/api/auth/refresh",
             "/api/auth/logout",
+            "/api/payments/webhooks",
             "/swagger-ui",
             "/v3/api-docs",
             "/webjars"

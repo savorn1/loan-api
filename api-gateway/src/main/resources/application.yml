@@ -233,8 +233,11 @@ management:
       application: ${spring.application.name}
 
 ---
-# Dev-only: allows any origin to call this gateway directly, without going
-# through the frontend's Nitro proxy.
+# Dev-only: allows any localhost origin/port to call this gateway directly,
+# without going through the frontend's Nitro proxy. Scoped to localhost rather
+# than '*' — allowCredentials:true plus a true wildcard would accept credentialed
+# requests from any origin, which is a real risk if this profile is ever active
+# somewhere other than a developer's own machine.
 spring:
   config:
     activate:
@@ -246,7 +249,9 @@ spring:
           globalcors:
             cors-configurations:
               '[/**]':
-                allowedOriginPatterns: '*'
+                allowedOriginPatterns:
+                  - 'http://localhost:*'
+                  - 'http://127.0.0.1:*'
                 allowedMethods:
                   - GET
                   - POST

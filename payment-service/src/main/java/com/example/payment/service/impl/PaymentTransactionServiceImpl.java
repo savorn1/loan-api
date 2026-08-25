@@ -2,11 +2,13 @@ package com.example.payment.service.impl;
 
 import com.example.payment.client.CustomerClient;
 import com.example.payment.client.LoanClient;
+import com.example.payment.client.PaymentWalletClient;
 import com.example.payment.config.PaymentTransactionDefaultsSeeder;
 import com.example.payment.dto.CustomerResponse;
 import com.example.payment.dto.PaymentTransactionItemResponse;
 import com.example.payment.dto.PaymentTransactionRequest;
 import com.example.payment.dto.PaymentTransactionResponse;
+import com.example.payment.dto.PaymentWalletDepositResponse;
 import com.example.payment.entity.PaymentChannel;
 import com.example.payment.entity.PaymentGateway;
 import com.example.payment.entity.PaymentMethod;
@@ -22,6 +24,7 @@ import com.example.payment.repository.PaymentTransactionItemRepository;
 import com.example.payment.repository.PaymentTransactionRepository;
 import com.example.payment.service.PaymentTransactionService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -32,10 +35,13 @@ import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class PaymentTransactionServiceImpl implements PaymentTransactionService {
 
     private final PaymentTransactionRepository paymentTransactionRepository;
@@ -45,6 +51,12 @@ public class PaymentTransactionServiceImpl implements PaymentTransactionService 
     private final PaymentGatewayRepository paymentGatewayRepository;
     private final CustomerClient customerClient;
     private final LoanClient loanClient;
+    private final PaymentWalletClient paymentWalletClient;
+
+    // PaymentGateway.provider value that routes create() through the payment-wallet
+    // merchant API (POST /deposits) instead of leaving the transaction as a bare,
+    // manually-settled PENDING record — see PaymentGateway.apiUrl for the target host.
+    private static final String PROVIDER_PAYMENT_WALLET = "PAYMENT_WALLET";
 
     // Only these transitions are allowed — mirrors the two action states the
     // frontend's detail page offers (PENDING -> SUCCESS/FAILED, SUCCESS -> REFUNDED).
@@ -63,6 +75,15 @@ public class PaymentTransactionServiceImpl implements PaymentTransactionService 
 
     @Override
     public PaymentTransactionResponse create(PaymentTransactionRequest request) {
+        if (StringUtils.hasText(request.getIdempotencyKey())) {
+            Optional<PaymentTransaction> existing =
+                    paymentTransactionRepository.findByIdempotencyKey(request.getIdempotencyKey());
+            if (existing.isPresent()) {
+                PaymentTransaction transaction = existing.get();
+                return toResponse(transaction, resolveCustomerName(transaction.getCustomerId()), itemsFor(transaction.getId()));
+            }
+        }
+
         PaymentMethod method = findMethodOrThrow(request.getPaymentMethodId());
         PaymentChannel channel = findChannelOrThrow(request.getPaymentChannelId());
         PaymentGateway gateway = findGatewayOrThrow(request.getPaymentGatewayId());
@@ -76,7 +97,20 @@ public class PaymentTransactionServiceImpl implements PaymentTransactionService 
             loanClient.getById(referenceId);
         }
 
-        PaymentTransaction transaction = PaymentTransaction.builder()
+        // Called before any local row is persisted: if payment-wallet is unreachable or
+        // rejects the request, create() fails outright rather than leaving behind a
+        // PENDING transaction with no way to actually collect the money. Reuses the
+        // caller's own idempotencyKey against payment-wallet when given, so a retried
+        // create() call (e.g. after a client timeout) can't open a second deposit even
+        // if it somehow raced past the findByIdempotencyKey lookup above.
+        String walletIdempotencyKey = StringUtils.hasText(request.getIdempotencyKey())
+                ? request.getIdempotencyKey()
+                : UUID.randomUUID().toString();
+        PaymentWalletDepositResponse deposit = isPaymentWalletGateway(gateway)
+                ? paymentWalletClient.createDeposit(gateway.getApiUrl(), request.getAmount(), walletIdempotencyKey)
+                : null;
+
+        PaymentTransaction.PaymentTransactionBuilder transactionBuilder = PaymentTransaction.builder()
                 .customerId(request.getCustomerId())
                 .paymentMethod(method)
                 .paymentChannel(channel)
@@ -88,10 +122,16 @@ public class PaymentTransactionServiceImpl implements PaymentTransactionService 
                 .principalAmount(request.getPrincipalAmount())
                 .interestAmount(request.getInterestAmount())
                 .referenceNo(request.getReferenceNo())
+                .idempotencyKey(request.getIdempotencyKey())
                 .status(TransactionStatus.PENDING)
-                .requestedAt(LocalDateTime.now())
-                .build();
-        transaction = paymentTransactionRepository.save(transaction);
+                .requestedAt(LocalDateTime.now());
+        if (deposit != null) {
+            transactionBuilder
+                    .walletDepositId(deposit.getId())
+                    .providerReference(deposit.getProviderReference())
+                    .paymentUrl(deposit.getPaymentUrl());
+        }
+        PaymentTransaction transaction = paymentTransactionRepository.save(transactionBuilder.build());
         transaction.setPaymentNo(generatePaymentNo(transaction.getId()));
         transaction = paymentTransactionRepository.save(transaction);
 
@@ -192,6 +232,41 @@ public class PaymentTransactionServiceImpl implements PaymentTransactionService 
         return toResponse(transaction, resolveCustomerName(transaction.getCustomerId()), itemsFor(id));
     }
 
+    @Override
+    public void applyWalletDepositWebhook(Long walletDepositId, String walletStatus, String failureReason) {
+        Optional<PaymentTransaction> transaction = paymentTransactionRepository.findByWalletDepositId(walletDepositId);
+        if (transaction.isEmpty()) {
+            log.warn("Received payment-wallet webhook for unknown deposit id {}", walletDepositId);
+            return;
+        }
+        TransactionStatus target = mapWalletStatus(walletStatus);
+        if (target == null || transaction.get().getStatus() == target) {
+            // Unrecognized/non-terminal status, or a replayed delivery we already applied
+            // — see the "Replay awareness" callout in payment-wallet's webhook docs.
+            return;
+        }
+        String reason = target == TransactionStatus.REFUNDED && !StringUtils.hasText(failureReason)
+                ? "Refunded via payment-wallet"
+                : failureReason;
+        updateStatus(transaction.get().getId(), target, reason, "payment-wallet-webhook");
+    }
+
+    private TransactionStatus mapWalletStatus(String walletStatus) {
+        if (walletStatus == null) {
+            return null;
+        }
+        return switch (walletStatus) {
+            case "SUCCESS" -> TransactionStatus.SUCCESS;
+            case "FAILED" -> TransactionStatus.FAILED;
+            case "REFUNDED" -> TransactionStatus.REFUNDED;
+            default -> null;
+        };
+    }
+
+    private boolean isPaymentWalletGateway(PaymentGateway gateway) {
+        return PROVIDER_PAYMENT_WALLET.equalsIgnoreCase(gateway.getProvider());
+    }
+
     private List<PaymentTransactionItemResponse> itemsFor(Long transactionId) {
         return paymentTransactionItemRepository.findByPaymentTransactionId(transactionId).stream()
                 .map(this::toItemResponse)
@@ -275,6 +350,8 @@ public class PaymentTransactionServiceImpl implements PaymentTransactionService 
                 .refundedBy(t.getRefundedBy())
                 .refundedAt(t.getRefundedAt())
                 .refundReason(t.getRefundReason())
+                .providerReference(t.getProviderReference())
+                .paymentUrl(t.getPaymentUrl())
                 .items(items)
                 .build();
     }

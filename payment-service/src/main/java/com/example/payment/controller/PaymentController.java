@@ -1,5 +1,6 @@
 package com.example.payment.controller;
 
+import com.example.payment.annotation.RateLimit;
 import com.example.payment.common.ApiResponse;
 import com.example.payment.common.PageResponse;
 import com.example.payment.dto.GenerateScheduleRequest;
@@ -24,6 +25,10 @@ public class PaymentController {
 
     private final PaymentService paymentService;
 
+    // Rate-limited: this endpoint records money movement, so it's a more sensitive
+    // write than most CRUD endpoints in this service (mirrors the pattern already
+    // used for customer-service's customer-creation endpoint).
+    @RateLimit(max = 20, window = 60)
     @PostMapping
     public ResponseEntity<ApiResponse<PaymentResponse>> create(@Valid @RequestBody PaymentRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)

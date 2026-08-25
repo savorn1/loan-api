@@ -1,5 +1,6 @@
 package com.example.loan.controller;
 
+import com.example.loan.annotation.RateLimit;
 import com.example.loan.common.ApiResponse;
 import com.example.loan.common.PageResponse;
 import com.example.loan.dto.ApplyPaymentRequest;
@@ -149,6 +150,10 @@ public class LoanController {
         return ResponseEntity.ok(ApiResponse.success(loanService.getDisbursements(id)));
     }
 
+    // Rate-limited: this triggers actual money movement (and a downstream
+    // accounting-service journal entry via LoanServiceImpl.recordTransaction),
+    // so it's a more sensitive write than most CRUD endpoints in this service.
+    @RateLimit(max = 20, window = 60)
     @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/{id}/disbursements")
     public ResponseEntity<ApiResponse<LoanDisbursementResponse>> addDisbursement(

@@ -92,4 +92,26 @@ public class PaymentTransaction extends BaseEntity {
 
     @Column(name = "refund_reason")
     private String refundReason;
+
+    // Populated only when paymentGateway.provider == "PAYMENT_WALLET" — see
+    // PaymentWalletClient / PaymentTransactionServiceImpl.create(). walletDepositId is
+    // the wallet-side deposit id, used to correlate the async webhook back to this row
+    // (PaymentWalletWebhookController); paymentUrl is handed to the customer to
+    // complete the payment (redirect or QR).
+    @Column(name = "wallet_deposit_id")
+    private Long walletDepositId;
+
+    @Column(name = "provider_reference", length = 150)
+    private String providerReference;
+
+    @Column(name = "payment_url", length = 500)
+    private String paymentUrl;
+
+    // Optional client-generated key (see PaymentTransactionRequest). A retried create()
+    // call with the same key returns the original transaction instead of creating a
+    // duplicate — including a duplicate payment-wallet deposit. Unique but nullable:
+    // Postgres allows any number of NULLs in a unique index, so callers who don't pass
+    // one are unaffected.
+    @Column(name = "idempotency_key", unique = true, length = 100)
+    private String idempotencyKey;
 }

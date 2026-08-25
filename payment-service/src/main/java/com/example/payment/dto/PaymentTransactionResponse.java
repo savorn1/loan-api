@@ -39,5 +39,11 @@ public class PaymentTransactionResponse {
     private String refundedBy;
     private LocalDateTime refundedAt;
     private String refundReason;
+    // Set only for a PAYMENT_WALLET gateway transaction — see PaymentWalletClient.
+    // paymentUrl is what the frontend redirects the customer to (or renders as a QR)
+    // to complete the deposit; the transaction stays PENDING until the webhook or a
+    // poll of GET /{id} reports a terminal status.
+    private String providerReference;
+    private String paymentUrl;
     private List<PaymentTransactionItemResponse> items;
 }

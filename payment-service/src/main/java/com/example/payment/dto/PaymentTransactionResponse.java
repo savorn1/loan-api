@@ -45,5 +45,8 @@ public class PaymentTransactionResponse {
     // poll of GET /{id} reports a terminal status.
     private String providerReference;
     private String paymentUrl;
+    // Deadline payment-wallet's checkout link/QR is good for — past this and still
+    // PENDING, expect status to flip to EXPIRED (webhook or reconciliation sweep).
+    private LocalDateTime walletExpiresAt;
     private List<PaymentTransactionItemResponse> items;
 }

@@ -59,9 +59,11 @@ public class PaymentTransactionServiceImpl implements PaymentTransactionService 
     private static final String PROVIDER_PAYMENT_WALLET = "PAYMENT_WALLET";
 
     // Only these transitions are allowed — mirrors the two action states the
-    // frontend's detail page offers (PENDING -> SUCCESS/FAILED, SUCCESS -> REFUNDED).
+    // frontend's detail page offers (PENDING -> SUCCESS/FAILED, SUCCESS -> REFUNDED),
+    // plus PENDING -> EXPIRED, which is system-driven only (payment-wallet's webhook
+    // or PaymentWalletReconciliationScheduler) — no UI action sets it directly.
     private static final Map<TransactionStatus, Set<TransactionStatus>> ALLOWED_TRANSITIONS = Map.of(
-            TransactionStatus.PENDING, EnumSet.of(TransactionStatus.SUCCESS, TransactionStatus.FAILED),
+            TransactionStatus.PENDING, EnumSet.of(TransactionStatus.SUCCESS, TransactionStatus.FAILED, TransactionStatus.EXPIRED),
             TransactionStatus.SUCCESS, EnumSet.of(TransactionStatus.REFUNDED)
     );
 
@@ -129,7 +131,8 @@ public class PaymentTransactionServiceImpl implements PaymentTransactionService 
             transactionBuilder
                     .walletDepositId(deposit.getId())
                     .providerReference(deposit.getProviderReference())
-                    .paymentUrl(deposit.getPaymentUrl());
+                    .paymentUrl(deposit.getPaymentUrl())
+                    .walletExpiresAt(deposit.getExpiresAt());
         }
         PaymentTransaction transaction = paymentTransactionRepository.save(transactionBuilder.build());
         transaction.setPaymentNo(generatePaymentNo(transaction.getId()));
@@ -259,6 +262,7 @@ public class PaymentTransactionServiceImpl implements PaymentTransactionService 
             case "SUCCESS" -> TransactionStatus.SUCCESS;
             case "FAILED" -> TransactionStatus.FAILED;
             case "REFUNDED" -> TransactionStatus.REFUNDED;
+            case "EXPIRED" -> TransactionStatus.EXPIRED;
             default -> null;
         };
     }
@@ -352,6 +356,7 @@ public class PaymentTransactionServiceImpl implements PaymentTransactionService 
                 .refundReason(t.getRefundReason())
                 .providerReference(t.getProviderReference())
                 .paymentUrl(t.getPaymentUrl())
+                .walletExpiresAt(t.getWalletExpiresAt())
                 .items(items)
                 .build();
     }

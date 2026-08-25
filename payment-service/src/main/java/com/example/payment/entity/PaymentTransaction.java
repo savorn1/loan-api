@@ -107,6 +107,12 @@ public class PaymentTransaction extends BaseEntity {
     @Column(name = "payment_url", length = 500)
     private String paymentUrl;
 
+    // Deadline payment-wallet's checkout link/QR is good for — mirrors
+    // Deposit.expiresAt on the wallet side. Past this and still PENDING, expect
+    // the transaction to flip to EXPIRED (see PaymentTransactionServiceImpl.mapWalletStatus).
+    @Column(name = "wallet_expires_at")
+    private LocalDateTime walletExpiresAt;
+
     // Optional client-generated key (see PaymentTransactionRequest). A retried create()
     // call with the same key returns the original transaction instead of creating a
     // duplicate — including a duplicate payment-wallet deposit. Unique but nullable:

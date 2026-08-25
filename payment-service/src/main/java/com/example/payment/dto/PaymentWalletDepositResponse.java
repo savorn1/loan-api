@@ -21,6 +21,7 @@ public class PaymentWalletDepositResponse {
     private String qrCodeData;
     private String failureReason;
     private Long walletTransactionId;
+    private LocalDateTime expiresAt;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

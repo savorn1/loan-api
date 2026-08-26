@@ -424,11 +424,13 @@ public class LoanServiceImpl implements LoanService {
         }
 
         CustomerResponse customer = customerClient.getById(saved.getCustomerId()).getData();
-        paymentClient.createLoanRepaymentTransaction(LoanRepaymentTransactionRequest.builder()
-                .customerId(saved.getCustomerId())
-                .loanId(saved.getId())
-                .amount(request.getAmount())
-                .build());
+        if (request.isRecordTransaction()) {
+            paymentClient.createLoanRepaymentTransaction(LoanRepaymentTransactionRequest.builder()
+                    .customerId(saved.getCustomerId())
+                    .loanId(saved.getId())
+                    .amount(request.getAmount())
+                    .build());
+        }
         return toResponse(saved, customer);
     }
 
@@ -470,6 +472,9 @@ public class LoanServiceImpl implements LoanService {
     @Transactional
     public LoanDisbursementResponse addDisbursement(Long id, LoanDisbursementRequest request) {
         Loan loan = findOrThrow(id);
+        if (loan.getStatus() != LoanStatus.ACTIVE) {
+            throw new AppException(HttpStatus.CONFLICT, "Disbursements can only be recorded for ACTIVE loans");
+        }
         assertWithinPrincipal(loan, request.getAmount(), null);
         LoanDisbursement disbursement = LoanDisbursement.builder()
                 .loan(loan)
@@ -611,6 +616,9 @@ public class LoanServiceImpl implements LoanService {
     @Override
     public LoanGuarantorResponse addGuarantor(Long id, LoanGuarantorRequest request) {
         Loan loan = findOrThrow(id);
+        if (loan.getStatus() != LoanStatus.ACTIVE) {
+            throw new AppException(HttpStatus.CONFLICT, "Guarantors can only be added to ACTIVE loans");
+        }
         LoanGuarantor guarantor = LoanGuarantor.builder()
                 .loan(loan)
                 .name(request.getName())
@@ -666,6 +674,9 @@ public class LoanServiceImpl implements LoanService {
     @Override
     public LoanCollateralResponse addCollateral(Long id, LoanCollateralRequest request) {
         Loan loan = findOrThrow(id);
+        if (loan.getStatus() != LoanStatus.ACTIVE) {
+            throw new AppException(HttpStatus.CONFLICT, "Collateral can only be added to ACTIVE loans");
+        }
         LoanCollateral collateral = LoanCollateral.builder()
                 .loan(loan)
                 .type(request.getType())
@@ -1129,6 +1140,9 @@ public class LoanServiceImpl implements LoanService {
     @Override
     public LoanInterestResponse addInterestAccrual(Long id, LoanInterestRequest request) {
         Loan loan = findOrThrow(id);
+        if (loan.getStatus() != LoanStatus.ACTIVE) {
+            throw new AppException(HttpStatus.CONFLICT, "Interest accruals can only be recorded for ACTIVE loans");
+        }
         LoanInterestAccrual accrual = LoanInterestAccrual.builder()
                 .loan(loan)
                 .periodStart(request.getPeriodStart())
@@ -1176,6 +1190,9 @@ public class LoanServiceImpl implements LoanService {
     @Override
     public LoanPenaltyResponse addPenalty(Long id, LoanPenaltyRequest request) {
         Loan loan = findOrThrow(id);
+        if (loan.getStatus() != LoanStatus.ACTIVE) {
+            throw new AppException(HttpStatus.CONFLICT, "Penalties can only be applied to ACTIVE loans");
+        }
         LoanPenalty penalty = LoanPenalty.builder()
                 .loan(loan)
                 .amount(request.getAmount())
@@ -1254,6 +1271,9 @@ public class LoanServiceImpl implements LoanService {
     @Override
     public LoanFeeResponse addFee(Long id, LoanFeeRequest request) {
         Loan loan = findOrThrow(id);
+        if (loan.getStatus() != LoanStatus.ACTIVE) {
+            throw new AppException(HttpStatus.CONFLICT, "Fees can only be charged to ACTIVE loans");
+        }
         LoanFee fee = LoanFee.builder()
                 .loan(loan)
                 .type(request.getType())

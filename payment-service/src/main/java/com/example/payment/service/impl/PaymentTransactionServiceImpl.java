@@ -4,6 +4,7 @@ import com.example.payment.client.CustomerClient;
 import com.example.payment.client.LoanClient;
 import com.example.payment.client.PaymentWalletClient;
 import com.example.payment.config.PaymentTransactionDefaultsSeeder;
+import com.example.payment.dto.ApplyPaymentRequest;
 import com.example.payment.dto.CustomerResponse;
 import com.example.payment.dto.PaymentTransactionItemResponse;
 import com.example.payment.dto.PaymentTransactionRequest;
@@ -222,6 +223,14 @@ public class PaymentTransactionServiceImpl implements PaymentTransactionService 
                     "This transaction was recorded automatically from a loan repayment and cannot be refunded here "
                             + "— reverse the payment on the loan instead.");
         }
+        // Applied before the status flip below: if the loan is no longer ACTIVE (or
+        // loan-service is unreachable), this throws and the transaction stays PENDING
+        // rather than reporting SUCCESS with nothing actually applied to the loan —
+        // the wallet webhook retries on a non-2xx response, and a manual retry from
+        // the UI has the same effect.
+        if (status == TransactionStatus.SUCCESS && BUSINESS_TYPE_LOAN_PAYMENT.equals(transaction.getBusinessType())) {
+            applyToLoan(transaction);
+        }
         transaction.setStatus(status);
         if (status == TransactionStatus.SUCCESS || status == TransactionStatus.FAILED) {
             transaction.setCompletedAt(LocalDateTime.now());
@@ -233,6 +242,20 @@ public class PaymentTransactionServiceImpl implements PaymentTransactionService 
         }
         transaction = paymentTransactionRepository.save(transaction);
         return toResponse(transaction, resolveCustomerName(transaction.getCustomerId()), itemsFor(id));
+    }
+
+    // Reduces the loan's outstanding balance by this transaction's amount and, via
+    // loan-service's applyPayment -> recordTransaction, posts the corresponding
+    // journal entry to accounting — the same chokepoint PaymentServiceImpl.markAsPaid
+    // uses for installment-level payments. recordTransaction=false: this
+    // PaymentTransaction row already exists, so loan-service shouldn't synthesize
+    // another one for it (see ApplyPaymentRequest.recordTransaction).
+    private void applyToLoan(PaymentTransaction transaction) {
+        Long loanId = parseReferenceId(transaction.getBusinessReference());
+        ApplyPaymentRequest applyRequest = new ApplyPaymentRequest();
+        applyRequest.setAmount(transaction.getAmount());
+        applyRequest.setRecordTransaction(false);
+        loanClient.applyPayment(loanId, applyRequest);
     }
 
     @Override

@@ -5,6 +5,7 @@ import com.example.payment.client.LoanClient;
 import com.example.payment.client.PaymentWalletClient;
 import com.example.payment.common.ApiResponse;
 import com.example.payment.config.PaymentTransactionDefaultsSeeder;
+import com.example.payment.dto.ApplyPaymentRequest;
 import com.example.payment.dto.CustomerResponse;
 import com.example.payment.dto.LoanResponse;
 import com.example.payment.dto.PaymentTransactionRequest;
@@ -34,6 +35,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -113,6 +115,37 @@ class PaymentTransactionServiceImplTest {
 
         assertThatThrownBy(() -> service.updateStatus(1L, TransactionStatus.REFUNDED, "why not", "kim.dara"))
                 .isInstanceOf(AppException.class);
+    }
+
+    @Test
+    void updateStatus_appliesToTheLoanWhenAGatewayTransactionSucceeds() {
+        transaction.setStatus(TransactionStatus.PENDING);
+        transaction.setBusinessReference("42");
+        when(loanClient.applyPayment(eq(42L), any())).thenReturn(ApiResponse.success(new LoanResponse()));
+
+        PaymentTransactionResponse response = service.updateStatus(1L, TransactionStatus.SUCCESS, null, "wallet-webhook");
+
+        assertThat(response.getStatus()).isEqualTo(TransactionStatus.SUCCESS);
+        ArgumentCaptor<ApplyPaymentRequest> requestCaptor = ArgumentCaptor.forClass(ApplyPaymentRequest.class);
+        verify(loanClient).applyPayment(eq(42L), requestCaptor.capture());
+        assertThat(requestCaptor.getValue().getAmount()).isEqualByComparingTo("50.00");
+        // The transaction row being updated here is itself the ledger entry — loan-service
+        // must not synthesize a second one via its own createLoanRepaymentTransaction callback.
+        assertThat(requestCaptor.getValue().isRecordTransaction()).isFalse();
+    }
+
+    @Test
+    void updateStatus_leavesTheTransactionPendingWhenApplyingToTheLoanFails() {
+        transaction.setStatus(TransactionStatus.PENDING);
+        transaction.setBusinessReference("42");
+        when(loanClient.applyPayment(eq(42L), any()))
+                .thenThrow(new AppException(org.springframework.http.HttpStatus.CONFLICT, "Loan is CLOSED"));
+
+        assertThatThrownBy(() -> service.updateStatus(1L, TransactionStatus.SUCCESS, null, "wallet-webhook"))
+                .isInstanceOf(AppException.class);
+
+        assertThat(transaction.getStatus()).isEqualTo(TransactionStatus.PENDING);
+        verify(paymentTransactionRepository, never()).save(any());
     }
 
     // ── createForLoanRepayment: books an already-completed loan payment ────────────────

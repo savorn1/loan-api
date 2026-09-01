@@ -4,6 +4,7 @@ import com.example.payment.annotation.RateLimit;
 import com.example.payment.common.ApiResponse;
 import com.example.payment.common.PageResponse;
 import com.example.payment.dto.GenerateScheduleRequest;
+import com.example.payment.dto.MarkPaidByInstallmentRequest;
 import com.example.payment.dto.PaymentRequest;
 import com.example.payment.dto.PaymentResponse;
 import com.example.payment.dto.PaymentStatusHistoryResponse;
@@ -65,6 +66,16 @@ public class PaymentController {
             @PathVariable Long id, Authentication authentication) {
         return ResponseEntity.ok(
                 ApiResponse.success("Payment marked as paid", paymentService.markAsPaid(id, actorName(authentication))));
+    }
+
+    // Called by loan-service, not a user — no @PreAuthorize, same trust model as
+    // /api/payments/transactions/loan-repayment (loan-service's Feign calls send no
+    // Authorization header; see PaymentClient in loan-service).
+    @PutMapping("/mark-paid-by-installment")
+    public ResponseEntity<ApiResponse<Void>> markPaidByInstallment(
+            @RequestBody MarkPaidByInstallmentRequest request) {
+        paymentService.markPaidByInstallment(request);
+        return ResponseEntity.ok(ApiResponse.success(null));
     }
 
     @GetMapping("/{id}/status-history")

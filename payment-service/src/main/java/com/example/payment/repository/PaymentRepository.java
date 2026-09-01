@@ -10,10 +10,16 @@ import org.springframework.data.repository.query.Param;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 public interface PaymentRepository extends JpaRepository<Payment, Long> {
 
     List<Payment> findByLoanId(Long loanId);
+
+    // Used by the loan-service reverse-sync path (markPaidByInstallment) to find the
+    // matching row for an installment loan-service just paid off through its own
+    // LoanPayment/LoanPaymentDetail allocation flow, not through this service.
+    Optional<Payment> findFirstByLoanIdAndInstallmentNumber(Long loanId, Integer installmentNumber);
 
     List<Payment> findByStatus(PaymentStatus status);
 

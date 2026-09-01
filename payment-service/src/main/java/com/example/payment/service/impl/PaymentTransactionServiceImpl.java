@@ -27,6 +27,7 @@ import com.example.payment.service.PaymentTransactionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -197,7 +198,7 @@ public class PaymentTransactionServiceImpl implements PaymentTransactionService 
 
     @Override
     public List<PaymentTransactionResponse> getAll() {
-        return paymentTransactionRepository.findAll().stream()
+        return paymentTransactionRepository.findAll(Sort.by(Sort.Direction.DESC, "createdAt")).stream()
                 .map(t -> toResponse(t, resolveCustomerName(t.getCustomerId()), itemsFor(t.getId())))
                 .toList();
     }

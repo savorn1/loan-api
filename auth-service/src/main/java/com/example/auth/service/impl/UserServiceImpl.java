@@ -58,6 +58,14 @@ public class UserServiceImpl implements UserService {
         if (filter.getRole() != null) {
             conditions.add((root, query, cb) -> cb.equal(root.get("role"), filter.getRole()));
         }
+        if (filter.getRoleName() != null && !filter.getRoleName().isBlank()) {
+            conditions.add((root, query, cb) -> {
+                // distinct: a user could join the roles collection more than once if
+                // findAll ever pages across a user with multiple matching join rows.
+                query.distinct(true);
+                return cb.equal(root.join("roles").get("name"), filter.getRoleName());
+            });
+        }
         if (filter.getStatus() != null) {
             conditions.add((root, query, cb) -> cb.equal(root.get("status"), filter.getStatus()));
         }

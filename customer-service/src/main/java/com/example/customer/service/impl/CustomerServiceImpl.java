@@ -1,9 +1,12 @@
 package com.example.customer.service.impl;
 
 import com.example.customer.common.PageResponse;
+import com.example.customer.dto.ComplaintFilterRequest;
 import com.example.customer.dto.CustomerAddressRequest;
 import com.example.customer.dto.CustomerAddressResponse;
 import com.example.customer.dto.CustomerAuditLogResponse;
+import com.example.customer.dto.CustomerComplaintRequest;
+import com.example.customer.dto.CustomerComplaintResponse;
 import com.example.customer.dto.CustomerContactRequest;
 import com.example.customer.dto.CustomerContactResponse;
 import com.example.customer.dto.CustomerEmploymentRequest;
@@ -24,6 +27,8 @@ import com.example.customer.dto.CustomerRiskProfileResponse;
 import com.example.customer.entity.Customer;
 import com.example.customer.entity.CustomerAddress;
 import com.example.customer.entity.CustomerAuditLog;
+import com.example.customer.entity.ComplaintStatus;
+import com.example.customer.entity.CustomerComplaint;
 import com.example.customer.entity.CustomerContact;
 import com.example.customer.entity.CustomerEmployment;
 import com.example.customer.entity.CustomerIdentity;
@@ -39,6 +44,7 @@ import com.example.customer.exception.AppException;
 import com.example.customer.exception.ResourceNotFoundException;
 import com.example.customer.repository.CustomerAddressRepository;
 import com.example.customer.repository.CustomerAuditLogRepository;
+import com.example.customer.repository.CustomerComplaintRepository;
 import com.example.customer.repository.CustomerContactRepository;
 import com.example.customer.repository.CustomerEmploymentRepository;
 import com.example.customer.repository.CustomerIdentityRepository;
@@ -60,6 +66,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
@@ -73,6 +80,7 @@ public class CustomerServiceImpl implements CustomerService {
     private final FileStorageService fileStorageService;
     private final CustomerAddressRepository customerAddressRepository;
     private final CustomerContactRepository customerContactRepository;
+    private final CustomerComplaintRepository customerComplaintRepository;
     private final CustomerEmploymentRepository customerEmploymentRepository;
     private final CustomerIncomeRepository customerIncomeRepository;
     private final CustomerRelationshipRepository customerRelationshipRepository;
@@ -395,6 +403,95 @@ public class CustomerServiceImpl implements CustomerService {
     }
 
     @Override
+    public List<CustomerComplaintResponse> getComplaints(Long customerId) {
+        findOrThrow(customerId);
+        return customerComplaintRepository.findByCustomerIdOrderByCreatedAtDesc(customerId).stream()
+                .map(this::toComplaintResponse)
+                .toList();
+    }
+
+    @Override
+    public CustomerComplaintResponse addComplaint(Long customerId, CustomerComplaintRequest request) {
+        Customer customer = findOrThrow(customerId);
+
+        CustomerComplaint complaint = CustomerComplaint.builder()
+                .customer(customer)
+                .category(request.getCategory())
+                .description(request.getDescription())
+                .status(request.getStatus() != null ? request.getStatus() : ComplaintStatus.OPEN)
+                .resolutionNotes(request.getResolutionNotes())
+                .build();
+
+        return toComplaintResponse(customerComplaintRepository.save(complaint));
+    }
+
+    @Override
+    public CustomerComplaintResponse updateComplaint(Long customerId, Long complaintId, CustomerComplaintRequest request) {
+        findOrThrow(customerId);
+        CustomerComplaint complaint = findComplaintOrThrow(customerId, complaintId);
+
+        ComplaintStatus previousStatus = complaint.getStatus();
+        ComplaintStatus newStatus = request.getStatus() != null ? request.getStatus() : previousStatus;
+
+        complaint.setCategory(request.getCategory());
+        complaint.setDescription(request.getDescription());
+        complaint.setStatus(newStatus);
+        complaint.setResolutionNotes(request.getResolutionNotes());
+
+        // Stamp resolvedAt the moment a complaint first moves into RESOLVED/CLOSED;
+        // clear it again if it's reopened back to OPEN/IN_PROGRESS.
+        boolean wasResolved = previousStatus == ComplaintStatus.RESOLVED || previousStatus == ComplaintStatus.CLOSED;
+        boolean isResolved = newStatus == ComplaintStatus.RESOLVED || newStatus == ComplaintStatus.CLOSED;
+        if (isResolved && !wasResolved) {
+            complaint.setResolvedAt(LocalDateTime.now());
+        } else if (!isResolved) {
+            complaint.setResolvedAt(null);
+        }
+
+        return toComplaintResponse(customerComplaintRepository.save(complaint));
+    }
+
+    @Override
+    public void deleteComplaint(Long customerId, Long complaintId) {
+        findOrThrow(customerId);
+        customerComplaintRepository.delete(findComplaintOrThrow(customerId, complaintId));
+    }
+
+    @Override
+    public PageResponse<CustomerComplaintResponse> listComplaints(ComplaintFilterRequest filter) {
+        List<Specification<CustomerComplaint>> conditions = new ArrayList<>();
+
+        if (filter.getCustomerId() != null) {
+            conditions.add((root, query, cb) -> cb.equal(root.get("customer").get("id"), filter.getCustomerId()));
+        }
+        if (filter.getStatus() != null) {
+            conditions.add((root, query, cb) -> cb.equal(root.get("status"), filter.getStatus()));
+        }
+        if (filter.getCategory() != null) {
+            conditions.add((root, query, cb) -> cb.equal(root.get("category"), filter.getCategory()));
+        }
+        if (filter.getDateFrom() != null) {
+            conditions.add((root, query, cb) ->
+                    cb.greaterThanOrEqualTo(root.get("createdAt"), filter.getDateFrom().atStartOfDay()));
+        }
+        if (filter.getDateTo() != null) {
+            conditions.add((root, query, cb) ->
+                    cb.lessThan(root.get("createdAt"), filter.getDateTo().plusDays(1).atStartOfDay()));
+        }
+
+        Specification<CustomerComplaint> spec = Specification.allOf(conditions);
+
+        Sort sort = "asc".equalsIgnoreCase(filter.getSortOrder())
+                ? Sort.by(filter.getSortBy()).ascending()
+                : Sort.by(filter.getSortBy()).descending();
+        Pageable pageable = PageRequest.of(Math.max(filter.getPage() - 1, 0), filter.getSize(), sort);
+
+        Page<CustomerComplaintResponse> page =
+                customerComplaintRepository.findAll(spec, pageable).map(this::toComplaintResponse);
+        return PageResponse.of(page);
+    }
+
+    @Override
     public List<CustomerEmploymentResponse> getEmployments(Long customerId) {
         findOrThrow(customerId);
         return customerEmploymentRepository.findByCustomerIdOrderByCreatedAtAsc(customerId).stream()
@@ -682,6 +779,17 @@ public class CustomerServiceImpl implements CustomerService {
         return contact;
     }
 
+    // Verifies the complaint belongs to customerId rather than just any customer,
+    // so one customer's complaint can't be read/modified via another customer's id.
+    private CustomerComplaint findComplaintOrThrow(Long customerId, Long complaintId) {
+        CustomerComplaint complaint = customerComplaintRepository.findById(complaintId)
+                .orElseThrow(() -> new ResourceNotFoundException("CustomerComplaint", complaintId));
+        if (!complaint.getCustomer().getId().equals(customerId)) {
+            throw new ResourceNotFoundException("CustomerComplaint", complaintId);
+        }
+        return complaint;
+    }
+
     // Verifies the employment record belongs to customerId rather than just any
     // customer, so one customer can't read/modify another's by guessing its id.
     private CustomerEmployment findEmploymentOrThrow(Long customerId, Long employmentId) {
@@ -790,6 +898,21 @@ public class CustomerServiceImpl implements CustomerService {
                 .address(contact.getAddress())
                 .createdAt(contact.getCreatedAt())
                 .updatedAt(contact.getUpdatedAt())
+                .build();
+    }
+
+    private CustomerComplaintResponse toComplaintResponse(CustomerComplaint complaint) {
+        return CustomerComplaintResponse.builder()
+                .id(complaint.getId())
+                .customerId(complaint.getCustomer().getId())
+                .customerName(complaint.getCustomer().getFullName())
+                .category(complaint.getCategory())
+                .description(complaint.getDescription())
+                .status(complaint.getStatus())
+                .resolutionNotes(complaint.getResolutionNotes())
+                .resolvedAt(complaint.getResolvedAt())
+                .createdAt(complaint.getCreatedAt())
+                .updatedAt(complaint.getUpdatedAt())
                 .build();
     }
 

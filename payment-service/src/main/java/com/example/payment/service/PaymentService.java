@@ -2,6 +2,7 @@ package com.example.payment.service;
 
 import com.example.payment.common.PageResponse;
 import com.example.payment.dto.GenerateScheduleRequest;
+import com.example.payment.dto.MarkPaidByInstallmentRequest;
 import com.example.payment.dto.PaymentRequest;
 import com.example.payment.dto.PaymentResponse;
 import com.example.payment.dto.PaymentStatusHistoryResponse;
@@ -19,6 +20,11 @@ public interface PaymentService {
     List<PaymentResponse> getByLoan(Long loanId);
 
     PaymentResponse markAsPaid(Long id, String changedBy);
+
+    // Reverse-sync counterpart to markAsPaid, called by loan-service instead of a
+    // user — see MarkPaidByInstallmentRequest for why this can't reuse markAsPaid.
+    // Silently no-ops if there's no matching row or it's already PAID.
+    void markPaidByInstallment(MarkPaidByInstallmentRequest request);
 
     List<PaymentStatusHistoryResponse> getStatusHistory(Long id);
 

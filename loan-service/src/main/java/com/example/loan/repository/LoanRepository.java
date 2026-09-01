@@ -20,6 +20,10 @@ import java.util.List;
 
 public interface LoanRepository extends JpaRepository<Loan, Long>, JpaSpecificationExecutor<Loan> {
 
+    // For the officer-productivity report — fetch-then-group-in-Java, same house
+    // style as ReportServiceImpl.getApprovalFunnel, rather than a GROUP BY query.
+    List<Loan> findByLoanOfficerIdIsNotNull();
+
     List<Loan> findByCustomerId(Long customerId);
 
     List<Loan> findByStatus(LoanStatus status);

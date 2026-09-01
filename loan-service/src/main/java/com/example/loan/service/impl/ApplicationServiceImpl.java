@@ -76,6 +76,7 @@ public class ApplicationServiceImpl implements ApplicationService {
         Application application = Application.builder()
                 .customerId(request.getCustomerId())
                 .branchId(customer != null ? customer.getBranchId() : null)
+                .loanOfficerId(request.getLoanOfficerId())
                 .loanProductId(request.getLoanProductId())
                 .requestedAmount(request.getRequestedAmount())
                 .requestedTermMonths(request.getRequestedTermMonths())
@@ -271,6 +272,10 @@ public class ApplicationServiceImpl implements ApplicationService {
             throw new AppException(HttpStatus.BAD_REQUEST,
                     "approvedAmount, approvedInterestRate and approvedTermMonths are all required when approving");
         }
+        if (request.getDecision() == ApprovalDecision.APPROVED
+                && request.getApprovedAmount().compareTo(application.getRequestedAmount()) > 0) {
+            throw new AppException(HttpStatus.BAD_REQUEST, "approvedAmount cannot exceed the requested amount");
+        }
 
         // Falls back to what the customer originally requested if the approver
         // doesn't explicitly change it — approving with a different term value
@@ -296,6 +301,7 @@ public class ApplicationServiceImpl implements ApplicationService {
             Loan loan = Loan.builder()
                     .customerId(application.getCustomerId())
                     .branchId(application.getBranchId())
+                    .loanOfficerId(application.getLoanOfficerId())
                     .loanProductId(application.getLoanProductId())
                     .principal(request.getApprovedAmount())
                     .interestRate(request.getApprovedInterestRate())
@@ -306,6 +312,9 @@ public class ApplicationServiceImpl implements ApplicationService {
                     .approvedAt(now)
                     .build();
             loan = loanRepository.save(loan);
+            String loanNo = generateLoanNo(loan);
+            loanRepository.updateLoanNo(loan.getId(), loanNo);
+            loan.setLoanNo(loanNo);
             application.setLoanId(loan.getId());
             application.setStatus(ApplicationStatus.APPROVED);
         } else {
@@ -330,6 +339,15 @@ public class ApplicationServiceImpl implements ApplicationService {
     private String generateApplicationNo(Application application) {
         String datePart = application.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
         return "APP-" + datePart + "-" + String.format("%06d", application.getId());
+    }
+
+    // Mirrors LoanServiceImpl.generateLoanNo() — loanNo is @Column(updatable = false),
+    // so it has to be written via loanRepository.updateLoanNo(...) (a bulk JPQL update)
+    // rather than a normal save(), same reason LoanServiceImpl.create() needs the same
+    // save -> generate -> updateLoanNo -> setLoanNo sequence.
+    private String generateLoanNo(Loan loan) {
+        String datePart = loan.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+        return "LN-" + datePart + "-" + String.format("%06d", loan.getId());
     }
 
     private ApplicationDocument findDocumentOrThrow(Long applicationId, Long documentId) {
@@ -414,6 +432,7 @@ public class ApplicationServiceImpl implements ApplicationService {
                 .applicationNo(application.getApplicationNo())
                 .customerId(application.getCustomerId())
                 .branchId(application.getBranchId())
+                .loanOfficerId(application.getLoanOfficerId())
                 .customerName(customer != null ? customer.getFirstName() + " " + customer.getLastName() : null)
                 .loanProductId(application.getLoanProductId())
                 .loanProductName(product != null ? product.getName() : null)

@@ -4,6 +4,7 @@ import com.example.loan.dto.ApprovalFunnelResponse;
 import com.example.loan.dto.ConcentrationRiskResponse;
 import com.example.loan.dto.DataQualityExceptionRow;
 import com.example.loan.dto.DisbursementTrendPointResponse;
+import com.example.loan.dto.LoanOfficerProductivityRow;
 import com.example.loan.dto.LoanStatusBreakdownResponse;
 import com.example.loan.dto.PortfolioSummaryResponse;
 import com.example.loan.dto.PricingSummaryResponse;
@@ -27,6 +28,8 @@ public interface ReportService {
     ConcentrationRiskResponse getConcentrationRisk(int topN);
 
     ApprovalFunnelResponse getApprovalFunnel(int months);
+
+    List<LoanOfficerProductivityRow> getOfficerProductivity();
 
     List<StatusAuditEntryResponse> getStatusAuditTrail(LocalDate dateFrom, LocalDate dateTo, LoanStatus status, int limit);
 

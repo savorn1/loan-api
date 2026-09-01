@@ -76,15 +76,24 @@ public class RbacSeeder implements CommandLineRunner {
 
         RbacRole adminRole = seedRole("ADMIN", "Full access to every seeded permission");
         RbacRole viewerRole = seedRole("VIEWER", "Read-only access across the system");
+        // Not itself permission-enforced yet (same caveat as every other seeded role
+        // here) — this role's real purpose is tagging which users can be assigned as
+        // the originating loan officer on an application (see Application.loanOfficerId
+        // in loan-service, and UserFilterRequest.roleName here for how it's queried).
+        RbacRole loanOfficerRole = seedRole("LOAN_OFFICER", "Originates and manages customer loan applications");
 
         permissions.forEach(permission -> assignPermission(adminRole, permission));
         permissions.stream()
                 .filter(permission -> "READ".equals(permission.getAction()))
                 .forEach(permission -> assignPermission(viewerRole, permission));
+        permissions.stream()
+                .filter(permission -> ("LOAN".equals(permission.getModule()) || "CUSTOMER".equals(permission.getModule()))
+                        && ("READ".equals(permission.getAction()) || "CREATE".equals(permission.getAction())))
+                .forEach(permission -> assignPermission(loanOfficerRole, permission));
 
         userRepository.findByUsername(adminUsername).ifPresent(admin -> assignRole(admin, adminRole));
 
-        log.info("Seeded {} permissions and 2 roles (ADMIN, VIEWER)", permissions.size());
+        log.info("Seeded {} permissions and 3 roles (ADMIN, VIEWER, LOAN_OFFICER)", permissions.size());
     }
 
     private Permission seedPermission(String resourceCode, String resourceLabel, String actionCode, String actionLabel) {

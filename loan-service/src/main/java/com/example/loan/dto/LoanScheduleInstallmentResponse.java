@@ -21,6 +21,11 @@ public class LoanScheduleInstallmentResponse {
     private BigDecimal interestAmount;
     private BigDecimal totalAmount;
     private BigDecimal outstandingBalance;
+    // Sum of non-reversed LoanPaymentDetail.principalAmount+interestAmount rows applied
+    // to this installment — see LoanServiceImpl.allocatePayment for the same computation.
+    // Not the same as (totalAmount - outstandingBalance): outstandingBalance here is
+    // frozen at schedule-generation time and never updated on payment.
+    private BigDecimal paidAmount;
     private ScheduleInstallmentStatus status;
     private LocalDateTime createdAt;
 }

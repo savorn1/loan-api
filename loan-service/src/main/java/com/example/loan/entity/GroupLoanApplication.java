@@ -48,6 +48,12 @@ public class GroupLoanApplication extends BaseEntity {
     // Copied from the group's branchId at creation — same unvalidated cross-service convention as Application.branchId.
     private Long branchId;
 
+    // Cross-service id (auth-service SysUser) — the staff member who originated this
+    // application, set directly from the request at creation. Optional, no FK, same
+    // convention as Application.loanOfficerId.
+    @Column(name = "loan_officer_id")
+    private Long loanOfficerId;
+
     private String purpose;
 
     @Enumerated(EnumType.STRING)

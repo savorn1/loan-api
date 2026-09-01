@@ -19,6 +19,7 @@ public class LoanResponse {
     private Long customerId;
     private String customerName;
     private Long branchId;
+    private Long loanOfficerId;
     private UUID loanProductId;
     private String loanProductName;
     private BigDecimal principal;

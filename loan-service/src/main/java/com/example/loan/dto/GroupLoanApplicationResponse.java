@@ -16,6 +16,7 @@ public class GroupLoanApplicationResponse {
     private Long groupId;
     private String groupName;
     private Long branchId;
+    private Long loanOfficerId;
     private String purpose;
     private GroupLoanApplicationStatus status;
     private List<GroupLoanMemberLineResponse> members;

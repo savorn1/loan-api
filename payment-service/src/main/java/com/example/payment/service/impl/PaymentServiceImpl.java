@@ -4,6 +4,7 @@ import com.example.payment.client.LoanClient;
 import com.example.payment.common.PageResponse;
 import com.example.payment.dto.ApplyPaymentRequest;
 import com.example.payment.dto.GenerateScheduleRequest;
+import com.example.payment.dto.MarkPaidByInstallmentRequest;
 import com.example.payment.dto.PaymentRequest;
 import com.example.payment.dto.PaymentResponse;
 import com.example.payment.dto.PaymentStatusHistoryResponse;
@@ -96,6 +97,35 @@ public class PaymentServiceImpl implements PaymentService {
         reminderNotifier.notify(saved, "Payment received",
                 String.format("We received your payment of %s for loan #%d.", saved.getAmount(), saved.getLoanId()));
         return toResponse(saved);
+    }
+
+    @Override
+    public void markPaidByInstallment(MarkPaidByInstallmentRequest request) {
+        Payment payment = paymentRepository
+                .findFirstByLoanIdAndInstallmentNumber(request.getLoanId(), request.getInstallmentNumber())
+                .orElse(null);
+        // No matching row (this service's schedule was never generated for this loan,
+        // or doesn't cover this installment) or already synced — either way, silently
+        // no-op rather than error, since this is a background sync call, not a user action.
+        if (payment == null || payment.getStatus() == PaymentStatus.PAID) {
+            return;
+        }
+
+        PaymentStatus fromStatus = payment.getStatus();
+        payment.setStatus(PaymentStatus.PAID);
+        payment.setPaidAt(request.getPaidAt() != null ? request.getPaidAt() : LocalDate.now());
+        payment.setPaidBy("system (loan-service)");
+        Payment saved = paymentRepository.save(payment);
+
+        paymentStatusHistoryRepository.save(PaymentStatusHistory.builder()
+                .payment(saved)
+                .fromStatus(fromStatus)
+                .toStatus(PaymentStatus.PAID)
+                .changedBy("system (loan-service)")
+                .build());
+
+        reminderNotifier.notify(saved, "Payment received",
+                String.format("We received your payment of %s for loan #%d.", saved.getAmount(), saved.getLoanId()));
     }
 
     @Override

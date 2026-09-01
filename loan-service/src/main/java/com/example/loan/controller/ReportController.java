@@ -5,6 +5,7 @@ import com.example.loan.dto.ApprovalFunnelResponse;
 import com.example.loan.dto.ConcentrationRiskResponse;
 import com.example.loan.dto.DataQualityExceptionRow;
 import com.example.loan.dto.DisbursementTrendPointResponse;
+import com.example.loan.dto.LoanOfficerProductivityRow;
 import com.example.loan.dto.LoanStatusBreakdownResponse;
 import com.example.loan.dto.PortfolioSummaryResponse;
 import com.example.loan.dto.PricingSummaryResponse;
@@ -62,6 +63,11 @@ public class ReportController {
     public ResponseEntity<ApiResponse<ApprovalFunnelResponse>> getApprovalFunnel(
             @RequestParam(defaultValue = "6") int months) {
         return ResponseEntity.ok(ApiResponse.success(reportService.getApprovalFunnel(months)));
+    }
+
+    @GetMapping("/officer-productivity")
+    public ResponseEntity<ApiResponse<List<LoanOfficerProductivityRow>>> getOfficerProductivity() {
+        return ResponseEntity.ok(ApiResponse.success(reportService.getOfficerProductivity()));
     }
 
     @GetMapping("/status-audit-trail")

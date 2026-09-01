@@ -13,6 +13,10 @@ public class GroupLoanApplicationRequest {
     @NotNull
     private Long groupId;
 
+    // Optional — the staff member (auth-service user) who originated this
+    // application. Same unvalidated cross-service-id convention as groupId.
+    private Long loanOfficerId;
+
     private String purpose;
 
     @NotEmpty

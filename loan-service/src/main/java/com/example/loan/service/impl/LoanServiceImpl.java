@@ -42,6 +42,7 @@ import com.example.loan.dto.LoanRefinanceRequest;
 import com.example.loan.dto.LoanRefinanceResponse;
 import com.example.loan.dto.LoanRepaymentTransactionRequest;
 import com.example.loan.dto.LoanRequest;
+import com.example.loan.dto.MarkPaidByInstallmentRequest;
 import com.example.loan.dto.LoanResponse;
 import com.example.loan.dto.LoanRestructureRejectRequest;
 import com.example.loan.dto.LoanRestructureRequest;
@@ -866,6 +867,17 @@ public class LoanServiceImpl implements LoanService {
                         request.getPaymentDate(), "LoanPaymentDetail", detail.getId(), description);
             }
             totalAllocated = totalAllocated.add(detail.getPrincipalAmount()).add(detail.getInterestAmount());
+            // Keeps payment-service's own Payment row for this installment in sync —
+            // see PaymentClient.markPaidByInstallment. Only fires once an installment
+            // is actually fully PAID, not on a partial allocation, since payment-service's
+            // PaymentStatus has no PARTIALLY_PAID equivalent to set it to.
+            if (detail.getScheduleInstallment().getStatus() == ScheduleInstallmentStatus.PAID) {
+                paymentClient.markPaidByInstallment(MarkPaidByInstallmentRequest.builder()
+                        .loanId(savedLoan.getId())
+                        .installmentNumber(detail.getScheduleInstallment().getInstallmentNumber())
+                        .paidAt(request.getPaymentDate())
+                        .build());
+            }
         }
         // No ACTIVE schedule, or the payment exceeds every unpaid installment
         // (e.g. an overpayment) — still record the balance reduction.
@@ -2032,6 +2044,7 @@ public class LoanServiceImpl implements LoanService {
                 .loanNo(loan.getLoanNo())
                 .customerId(loan.getCustomerId())
                 .branchId(loan.getBranchId())
+                .loanOfficerId(loan.getLoanOfficerId())
                 .customerName(customer != null
                         ? customer.getFirstName() + " " + customer.getLastName()
                         : null)
@@ -2389,8 +2402,19 @@ public class LoanServiceImpl implements LoanService {
                 .interestAmount(installment.getInterestAmount())
                 .totalAmount(installment.getTotalAmount())
                 .outstandingBalance(installment.getOutstandingBalance())
+                .paidAmount(paidAmountFor(installment))
                 .status(installment.getStatus())
                 .createdAt(installment.getCreatedAt())
                 .build();
+    }
+
+    // Same "paid so far" computation allocatePayment uses to decide how much of an
+    // installment remains — reversed payments are excluded, same reason allocatePayment
+    // excludes them (reversePayment relies on this to free the installment back up).
+    private BigDecimal paidAmountFor(LoanScheduleInstallment installment) {
+        return loanPaymentDetailRepository.findByScheduleInstallmentId(installment.getId()).stream()
+                .filter(detail -> !detail.getPayment().isReversed())
+                .map(detail -> detail.getPrincipalAmount().add(detail.getInterestAmount()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 }

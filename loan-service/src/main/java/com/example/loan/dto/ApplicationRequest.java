@@ -13,6 +13,11 @@ public class ApplicationRequest {
     @NotNull
     private Long customerId;
 
+    // Optional — the staff member (auth-service user) who originated this
+    // application, e.g. for productivity reporting. Not validated against
+    // auth-service here, same unvalidated-cross-service-id convention as customerId.
+    private Long loanOfficerId;
+
     @NotNull
     private UUID loanProductId;
 

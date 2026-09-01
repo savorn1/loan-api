@@ -3,9 +3,12 @@ package com.example.customer.controller;
 import com.example.customer.annotation.RateLimit;
 import com.example.customer.common.ApiResponse;
 import com.example.customer.common.PageResponse;
+import com.example.customer.dto.ComplaintFilterRequest;
 import com.example.customer.dto.CustomerAddressRequest;
 import com.example.customer.dto.CustomerAddressResponse;
 import com.example.customer.dto.CustomerAuditLogResponse;
+import com.example.customer.dto.CustomerComplaintRequest;
+import com.example.customer.dto.CustomerComplaintResponse;
 import com.example.customer.dto.CustomerContactRequest;
 import com.example.customer.dto.CustomerContactResponse;
 import com.example.customer.dto.CustomerEmploymentRequest;
@@ -163,6 +166,40 @@ public class CustomerController {
     public ResponseEntity<ApiResponse<Void>> deleteContact(@PathVariable Long id, @PathVariable Long contactId) {
         customerService.deleteContact(id, contactId);
         return ResponseEntity.ok(ApiResponse.success("Contact deleted", null));
+    }
+
+    // Literal "/complaints" sibling to "/{id}" below — Spring matches literal path
+    // segments ahead of path-variable patterns, so this always resolves correctly
+    // and doesn't get swallowed by getById's {id} mapping.
+    @GetMapping("/complaints")
+    public ResponseEntity<PageResponse<CustomerComplaintResponse>> getAllComplaints(
+            @ModelAttribute ComplaintFilterRequest filter) {
+        return ResponseEntity.ok(customerService.listComplaints(filter));
+    }
+
+    @GetMapping("/{id}/complaints")
+    public ResponseEntity<ApiResponse<List<CustomerComplaintResponse>>> getComplaints(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.success(customerService.getComplaints(id)));
+    }
+
+    @PostMapping("/{id}/complaints")
+    public ResponseEntity<ApiResponse<CustomerComplaintResponse>> addComplaint(@PathVariable Long id,
+                                                                                  @Valid @RequestBody CustomerComplaintRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Complaint logged", customerService.addComplaint(id, request)));
+    }
+
+    @PutMapping("/{id}/complaints/{complaintId}")
+    public ResponseEntity<ApiResponse<CustomerComplaintResponse>> updateComplaint(@PathVariable Long id,
+                                                                                     @PathVariable Long complaintId,
+                                                                                     @Valid @RequestBody CustomerComplaintRequest request) {
+        return ResponseEntity.ok(ApiResponse.success("Complaint updated", customerService.updateComplaint(id, complaintId, request)));
+    }
+
+    @DeleteMapping("/{id}/complaints/{complaintId}")
+    public ResponseEntity<ApiResponse<Void>> deleteComplaint(@PathVariable Long id, @PathVariable Long complaintId) {
+        customerService.deleteComplaint(id, complaintId);
+        return ResponseEntity.ok(ApiResponse.success("Complaint deleted", null));
     }
 
     @GetMapping("/{id}/employments")

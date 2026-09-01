@@ -13,6 +13,10 @@ public class UserFilterRequest {
 
     private String username;
     private Role role;
+    // RbacRole.name (e.g. "LOAN_OFFICER") — the additive RBAC layer, distinct from
+    // the `role` enum field above. Lets a caller fetch e.g. every loan officer for
+    // an assignment dropdown without a dedicated endpoint per role.
+    private String roleName;
     private UserStatus status;
     private LocalDate startDate;
     private LocalDate endDate;

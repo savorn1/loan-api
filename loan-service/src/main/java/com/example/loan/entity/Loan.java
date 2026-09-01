@@ -48,6 +48,13 @@ public class Loan extends BaseEntity {
 
     private Long branchId;
 
+    // Copied from Application.loanOfficerId / GroupLoanApplication.loanOfficerId when
+    // an approval creates this Loan (see ApplicationServiceImpl/GroupLoanApplication-
+    // ServiceImpl addApproval()) — cross-service id (auth-service SysUser), no FK,
+    // nullable/optional same as on the application it came from.
+    @Column(name = "loan_officer_id")
+    private Long loanOfficerId;
+
     // Copied from Application.loanProductId when an approval creates this Loan (see
     // ApplicationServiceImpl.addApproval()). Nullable for the same ddl-auto=update reason
     // as loanNo above.

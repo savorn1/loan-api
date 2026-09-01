@@ -1,9 +1,12 @@
 package com.example.customer.service;
 
 import com.example.customer.common.PageResponse;
+import com.example.customer.dto.ComplaintFilterRequest;
 import com.example.customer.dto.CustomerAddressRequest;
 import com.example.customer.dto.CustomerAddressResponse;
 import com.example.customer.dto.CustomerAuditLogResponse;
+import com.example.customer.dto.CustomerComplaintRequest;
+import com.example.customer.dto.CustomerComplaintResponse;
 import com.example.customer.dto.CustomerContactRequest;
 import com.example.customer.dto.CustomerContactResponse;
 import com.example.customer.dto.CustomerEmploymentRequest;
@@ -64,6 +67,16 @@ public interface CustomerService {
     CustomerContactResponse updateContact(Long customerId, Long contactId, CustomerContactRequest request);
 
     void deleteContact(Long customerId, Long contactId);
+
+    List<CustomerComplaintResponse> getComplaints(Long customerId);
+
+    CustomerComplaintResponse addComplaint(Long customerId, CustomerComplaintRequest request);
+
+    CustomerComplaintResponse updateComplaint(Long customerId, Long complaintId, CustomerComplaintRequest request);
+
+    void deleteComplaint(Long customerId, Long complaintId);
+
+    PageResponse<CustomerComplaintResponse> listComplaints(ComplaintFilterRequest filter);
 
     List<CustomerEmploymentResponse> getEmployments(Long customerId);
 

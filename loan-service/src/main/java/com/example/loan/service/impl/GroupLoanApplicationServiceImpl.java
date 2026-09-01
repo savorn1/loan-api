@@ -76,6 +76,7 @@ public class GroupLoanApplicationServiceImpl implements GroupLoanApplicationServ
         GroupLoanApplication application = GroupLoanApplication.builder()
                 .group(group)
                 .branchId(group.getBranchId())
+                .loanOfficerId(request.getLoanOfficerId())
                 .purpose(request.getPurpose())
                 .status(GroupLoanApplicationStatus.SUBMITTED)
                 .submittedAt(LocalDateTime.now())
@@ -169,6 +170,11 @@ public class GroupLoanApplicationServiceImpl implements GroupLoanApplicationServ
                         .orElseThrow(() -> new AppException(HttpStatus.BAD_REQUEST,
                                 "Customer " + decision.getCustomerId() + " is not a member of this application"));
 
+                if (decision.getApprovedAmount().compareTo(member.getRequestedAmount()) > 0) {
+                    throw new AppException(HttpStatus.BAD_REQUEST,
+                            "approvedAmount cannot exceed the requested amount for customer " + decision.getCustomerId());
+                }
+
                 // Falls back to what the member originally requested if the approver
                 // doesn't explicitly change it — same convention as the individual
                 // application approval flow.
@@ -183,6 +189,7 @@ public class GroupLoanApplicationServiceImpl implements GroupLoanApplicationServ
                 Loan loan = Loan.builder()
                         .customerId(member.getCustomerId())
                         .branchId(application.getBranchId())
+                        .loanOfficerId(application.getLoanOfficerId())
                         .principal(decision.getApprovedAmount())
                         .interestRate(decision.getApprovedInterestRate())
                         .termMonths(decision.getApprovedTermMonths())
@@ -192,6 +199,9 @@ public class GroupLoanApplicationServiceImpl implements GroupLoanApplicationServ
                         .approvedAt(now)
                         .build();
                 loan = loanRepository.save(loan);
+                String loanNo = generateLoanNo(loan);
+                loanRepository.updateLoanNo(loan.getId(), loanNo);
+                loan.setLoanNo(loanNo);
                 member.setLoanId(loan.getId());
                 memberRepository.save(member);
             }
@@ -318,6 +328,7 @@ public class GroupLoanApplicationServiceImpl implements GroupLoanApplicationServ
                 .groupId(application.getGroup().getId())
                 .groupName(application.getGroup().getName())
                 .branchId(application.getBranchId())
+                .loanOfficerId(application.getLoanOfficerId())
                 .purpose(application.getPurpose())
                 .status(application.getStatus())
                 .members(members)
@@ -332,5 +343,14 @@ public class GroupLoanApplicationServiceImpl implements GroupLoanApplicationServ
     private String generateApplicationNo(GroupLoanApplication application) {
         String datePart = application.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
         return "GAPP-" + datePart + "-" + String.format("%06d", application.getId());
+    }
+
+    // Mirrors LoanServiceImpl.generateLoanNo() — loanNo is @Column(updatable = false),
+    // so it has to be written via loanRepository.updateLoanNo(...) (a bulk JPQL update)
+    // rather than a normal save(), same reason LoanServiceImpl.create() needs the same
+    // save -> generate -> updateLoanNo -> setLoanNo sequence.
+    private String generateLoanNo(Loan loan) {
+        String datePart = loan.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+        return "LN-" + datePart + "-" + String.format("%06d", loan.getId());
     }
 }

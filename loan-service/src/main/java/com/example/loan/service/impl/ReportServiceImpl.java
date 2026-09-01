@@ -10,6 +10,7 @@ import com.example.loan.dto.ConcentrationRiskResponse;
 import com.example.loan.dto.CustomerOutstandingRow;
 import com.example.loan.dto.DataQualityExceptionRow;
 import com.example.loan.dto.DisbursementTrendPointResponse;
+import com.example.loan.dto.LoanOfficerProductivityRow;
 import com.example.loan.dto.LoanPricingRow;
 import com.example.loan.dto.LoanStatusBreakdownResponse;
 import com.example.loan.dto.PortfolioSummaryResponse;
@@ -196,6 +197,38 @@ public class ReportServiceImpl implements ReportService {
                 .avgDecisionDays(avgDecisionDays)
                 .statusBreakdown(breakdown)
                 .build();
+    }
+
+    @Override
+    public List<LoanOfficerProductivityRow> getOfficerProductivity() {
+        List<Loan> loans = loanRepository.findByLoanOfficerIdIsNotNull();
+
+        Map<Long, List<Loan>> byOfficer = loans.stream()
+                .collect(Collectors.groupingBy(Loan::getLoanOfficerId));
+
+        return byOfficer.entrySet().stream()
+                .map(entry -> {
+                    Long officerId = entry.getKey();
+                    List<Loan> officerLoans = entry.getValue();
+                    List<Loan> activeLoans = officerLoans.stream()
+                            .filter(loan -> loan.getStatus() == LoanStatus.ACTIVE)
+                            .toList();
+
+                    return LoanOfficerProductivityRow.builder()
+                            .loanOfficerId(officerId)
+                            .loanCount(officerLoans.size())
+                            .totalPrincipal(officerLoans.stream()
+                                    .map(Loan::getPrincipal)
+                                    .reduce(BigDecimal.ZERO, BigDecimal::add))
+                            .activeLoanCount(activeLoans.size())
+                            .activeOutstandingBalance(activeLoans.stream()
+                                    .map(Loan::getOutstandingBalance)
+                                    .filter(java.util.Objects::nonNull)
+                                    .reduce(BigDecimal.ZERO, BigDecimal::add))
+                            .build();
+                })
+                .sorted((a, b) -> b.getTotalPrincipal().compareTo(a.getTotalPrincipal()))
+                .toList();
     }
 
     @Override

@@ -49,6 +49,13 @@ public class Application extends BaseEntity {
     // — raw cross-service id, no FK, same unvalidated convention as customerId.
     private Long branchId;
 
+    // Cross-service id (auth-service SysUser) — the staff member who originated this
+    // application, set directly from the request at creation (unlike branchId, which
+    // is derived). Nullable: optional, and ddl-auto=update can't add a NOT NULL column
+    // to a table that already has rows.
+    @Column(name = "loan_officer_id")
+    private Long loanOfficerId;
+
     // Cross-service id (loan-product-service) — populated at submission and validated
     // against the product's amount/term range in ApplicationServiceImpl.create()/update().
     // Nullable because ddl-auto=update can't add a NOT NULL column to a table that already

@@ -56,6 +56,29 @@ public interface JournalEntryLineRepository extends JpaRepository<JournalEntryLi
                                                                    @Param("dateFrom") LocalDate dateFrom,
                                                                    @Param("dateTo") LocalDate dateTo);
 
+    // Per-account debit/credit totals over an open-ended date range. Serves both
+    // financial statements: the income statement passes both bounds (a period), the
+    // balance sheet passes dateFrom = null (cumulative from inception to asOfDate).
+    @Query("select new com.example.accounting.dto.AccountSideTotal(l.glAccount.id, l.entrySide, sum(l.amount)) " +
+            "from JournalEntryLine l " +
+            "where l.journalEntry.status = com.example.accounting.entity.JournalEntryStatus.POSTED " +
+            "and (cast(:dateFrom as date) is null or l.journalEntry.transactionDate >= :dateFrom) " +
+            "and (cast(:dateTo as date) is null or l.journalEntry.transactionDate <= :dateTo) " +
+            "group by l.glAccount.id, l.entrySide")
+    List<AccountSideTotal> aggregateByAccountAndSideForDateRange(@Param("dateFrom") LocalDate dateFrom,
+                                                                    @Param("dateTo") LocalDate dateTo);
+
+    // Opening cash balance for the cash flow statement — everything posted to the
+    // cash accounts strictly before the window starts.
+    @Query("select new com.example.accounting.dto.AccountSideTotal(l.glAccount.id, l.entrySide, sum(l.amount)) " +
+            "from JournalEntryLine l " +
+            "where l.glAccount.accountNo in :accountNos " +
+            "and l.journalEntry.status = com.example.accounting.entity.JournalEntryStatus.POSTED " +
+            "and l.journalEntry.transactionDate < :beforeDate " +
+            "group by l.glAccount.id, l.entrySide")
+    List<AccountSideTotal> aggregateForAccountNosBeforeDate(@Param("accountNos") List<String> accountNos,
+                                                               @Param("beforeDate") LocalDate beforeDate);
+
     @Query("select new com.example.accounting.dto.BranchAccountTypeTotal(l.journalEntry.branchId, ga.accountType, l.entrySide, sum(l.amount)) " +
             "from JournalEntryLine l join l.glAccount ga " +
             "where l.journalEntry.status = com.example.accounting.entity.JournalEntryStatus.POSTED " +

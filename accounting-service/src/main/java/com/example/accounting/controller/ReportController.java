@@ -1,9 +1,13 @@
 package com.example.accounting.controller;
 
 import com.example.accounting.common.ApiResponse;
+import com.example.accounting.dto.BalanceSheetResponse;
 import com.example.accounting.dto.BranchLedgerResponse;
 import com.example.accounting.dto.BudgetVsActualRow;
+import com.example.accounting.dto.CashFlowStatementResponse;
 import com.example.accounting.dto.IncomeByBranchResponse;
+import com.example.accounting.dto.IncomeStatementResponse;
+import com.example.accounting.service.FinancialStatementService;
 import com.example.accounting.service.GeneralLedgerService;
 import com.example.accounting.service.ReportService;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +28,7 @@ public class ReportController {
 
     private final GeneralLedgerService generalLedgerService;
     private final ReportService reportService;
+    private final FinancialStatementService financialStatementService;
 
     // "Ledger by Branch" — posted activity across every GL account for a single branch.
     @GetMapping("/ledger-by-branch")
@@ -45,5 +50,32 @@ public class ReportController {
     public ResponseEntity<ApiResponse<List<BudgetVsActualRow>>> getBudgetVsActual(
             @RequestParam Long financialPeriodId) {
         return ResponseEntity.ok(ApiResponse.success(reportService.getBudgetVsActual(financialPeriodId)));
+    }
+
+    // Profit & loss for a window. Both bounds are optional — omitting them reports
+    // over all posted history.
+    @GetMapping("/income-statement")
+    public ResponseEntity<ApiResponse<IncomeStatementResponse>> getIncomeStatement(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo) {
+        return ResponseEntity.ok(ApiResponse.success(financialStatementService.getIncomeStatement(dateFrom, dateTo)));
+    }
+
+    // Position as of a date, cumulative over all posted history up to it. Defaults to today.
+    @GetMapping("/balance-sheet")
+    public ResponseEntity<ApiResponse<BalanceSheetResponse>> getBalanceSheet(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asOfDate) {
+        return ResponseEntity.ok(ApiResponse.success(
+                financialStatementService.getBalanceSheet(asOfDate != null ? asOfDate : LocalDate.now())));
+    }
+
+    // Direct-method cash movement. Both bounds are required — an opening balance is
+    // meaningless without a start date, and a closing one without an end.
+    @GetMapping("/cash-flow")
+    public ResponseEntity<ApiResponse<CashFlowStatementResponse>> getCashFlowStatement(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo) {
+        return ResponseEntity.ok(ApiResponse.success(
+                financialStatementService.getCashFlowStatement(dateFrom, dateTo)));
     }
 }
